@@ -467,6 +467,9 @@ function OutputView({
   // First listed service — used to anchor benefit-focused copy
   const coreService = servicesList.length > 0 ? servicesList[0] : null;
 
+  // All services joined — used for theme detection across the full list
+  const allServicesText = servicesList.join(" ").toLowerCase();
+
   // Try to pull a location/city out of the audience field
   // e.g. "Families in Memphis" → "Memphis"  |  "homeowners in the Dallas area" → "Dallas area"
   const extractLocation = (text: string): string | null => {
@@ -475,33 +478,196 @@ function OutputView({
   };
   const location = extractLocation(audience);
 
-  // Describe a service item in one line based on keywords in its name
+  // Detect the dominant theme across ALL listed services
+  const getServiceTheme = (): string => {
+    const t = allServicesText;
+    if (/media.?box|tv.?box|set.?top|iptv|streaming.?box|kodi|firestick|roku|apple.?tv|entertainment.?box/.test(t)) return "home-entertainment";
+    if (/wi.?fi|wifi|wireless|network|internet|router|hotspot/.test(t) && /setup|connect|install|config|support/.test(t)) return "tech-support";
+    if (/remote|walkthrough|troubleshoot|device.?support|tech.?help|customer.?support/.test(t)) return "tech-support";
+    if (/lawn|mow|landscap|yard|grass|tree|hedge|mulch|sod/.test(t)) return "lawn-care";
+    if (/clean|sanitiz|janitorial|housekeep|maid|pressure.?wash/.test(t)) return "cleaning";
+    if (/plumb|pipe|drain|leak|faucet|toilet|sewer/.test(t)) return "plumbing";
+    if (/electric|wiring|panel|outlet|circuit|generator/.test(t)) return "electrical";
+    if (/web|website|seo|digital.?market|social.?media|ppc|ads/.test(t)) return "digital-marketing";
+    if (/hair|nail|salon|spa|massage|beauty|wax|lash|brow/.test(t)) return "beauty";
+    if (/book|account|payroll|tax|financ|audit|cpa|quickbook/.test(t)) return "accounting";
+    if (/coach|consult|strateg|advise|mentor|business.?plan/.test(t)) return "consulting";
+    if (/photo|video|film|edit|shoot|reel|headshot/.test(t)) return "photography";
+    if (/design|brand|logo|graphic|illustrat|print/.test(t)) return "design";
+    if (/tutor|teach|train|educat|lesson|homework|sat|act/.test(t)) return "tutoring";
+    if (/move|relocat|haul|junk|pack|storage/.test(t)) return "moving";
+    if (/pest|exterminate|rodent|bug|termite|mosquito/.test(t)) return "pest-control";
+    if (/paint|coat|finish|stain|drywall|prime/.test(t)) return "painting";
+    if (/handyman|repair|fix|install|maintain|assemble/.test(t)) return "handyman";
+    if (/childcar|daycar|babysit|nanny|preschool|afterschool/.test(t)) return "childcare";
+    if (/health|fitness|gym|nutrit|wellness|yoga|personal.?train|pilates/.test(t)) return "wellness";
+    if (/legal|law|contract|attorney|notary|estate.?plan/.test(t)) return "legal";
+    if (/deliver|ship|transport|logistic|courier|dispatch/.test(t)) return "delivery";
+    if (/event|wedding|party|celebrat|decor|cater/.test(t)) return "events";
+    if (/real.?estate|property|rent|lease|home.?buy|realtor/.test(t)) return "real-estate";
+    if (/insur|protect|coverage|policy|claim/.test(t)) return "insurance";
+    if (/setup|install|config|support|troubleshoot|tech/.test(t)) return "tech-support";
+    return "general";
+  };
+  const serviceTheme = getServiceTheme();
+
+  // Benefit headline phrase — theme-aware, no "[Service] Done Right"
+  const getBenefitHeadline = (): string => {
+    const loc = location ? ` in ${location}` : "";
+    switch (serviceTheme) {
+      case "home-entertainment": return "Simple TV Box Setup & Home Entertainment Support";
+      case "tech-support":       return "Friendly Tech Help — Setup, Support & Troubleshooting";
+      case "lawn-care":          return location ? `Reliable Lawn Care in ${location}` : "A Yard You Can Be Proud Of";
+      case "cleaning":           return location ? `Professional Cleaning Services in ${location}` : "A Cleaner Space Without the Hassle";
+      case "plumbing":           return "Fast Plumbing Repairs When You Need Them";
+      case "electrical":         return "Safe, Professional Electrical Work You Can Trust";
+      case "digital-marketing":  return "Get Found Online and Bring in the Right Customers";
+      case "beauty":             return "Look and Feel Your Best — Every Single Visit";
+      case "accounting":         return "Financial Clarity So You Can Run Your Business With Confidence";
+      case "consulting":         return "Practical Guidance That Moves Your Business Forward";
+      case "photography":        return "Visuals That Tell Your Story the Right Way";
+      case "design":             return "Design That Represents You and Attracts the Right People";
+      case "tutoring":           return "Build Real Skills and Lasting Confidence";
+      case "moving":             return `A Smoother Move${loc} — Start to Finish`;
+      case "pest-control":       return "Get Rid of Pests and Keep Them Out for Good";
+      case "painting":           return "Fresh Paint, Clean Results — On Time and On Budget";
+      case "handyman":           return "Reliable Home Repairs Done Right the First Time";
+      case "childcare":          return "Safe, Caring Support for Your Child Every Day";
+      case "wellness":           return "Practical Health and Fitness Support That Fits Real Life";
+      case "legal":              return "Straightforward Legal Help When You Need It Most";
+      case "delivery":           return `Dependable Delivery${loc}, On Your Schedule`;
+      case "events":             return "Events That Run Smoothly and Feel Effortless";
+      case "real-estate":        return `Buy, Sell, or Rent${loc} With Confidence`;
+      case "insurance":          return "The Right Coverage, Explained in Plain Language";
+      default:                   return location ? `Dependable Service in ${location}` : "Quality Work You Can Count On";
+    }
+  };
+
+  // Describe a single service item specifically — matched to its name, not a generic fallback
   const describeService = (name: string): string => {
     const n = name.toLowerCase();
-    if (/lawn|mow|landscap|yard|grass/.test(n)) return "Keep your outdoor spaces looking their best year-round.";
-    if (/clean|sanitiz|janitorial|housekeep/.test(n)) return "Thorough, dependable cleaning you won't have to think twice about.";
-    if (/book|account|payroll|tax|financ/.test(n)) return "Accurate and organized so you can focus on running your business.";
-    if (/plumb|pipe|drain|leak/.test(n)) return "Fast, reliable repairs that get your home back to normal.";
-    if (/electric|wiring|panel|outlet/.test(n)) return "Safe, code-compliant work done by experienced professionals.";
-    if (/coach|consult|strateg|advise/.test(n)) return "Practical guidance that moves the needle on what matters most.";
-    if (/design|brand|logo|graphic/.test(n)) return "Visuals that represent you well and leave a lasting impression.";
-    if (/photo|video|film|edit/.test(n)) return "High-quality content that tells your story with clarity and style.";
-    if (/tutor|teach|train|educat/.test(n)) return "Clear, patient instruction tailored to where you are right now.";
-    if (/web|site|seo|digital|market/.test(n)) return "Online presence that brings in the right people at the right time.";
-    if (/hair|nail|salon|spa|massage|beauty/.test(n)) return "Professional care in a welcoming, relaxing environment.";
-    if (/repair|fix|install|maintain/.test(n)) return "Handled properly the first time — no callbacks, no excuses.";
-    if (/deliver|ship|transport|logistic/.test(n)) return "Reliable pickup and delivery, on your schedule.";
-    if (/event|wedding|party|celebrat/.test(n)) return "Expertly coordinated so you can enjoy every moment.";
-    if (/health|fitness|nutrit|wellness/.test(n)) return "Practical support for feeling better and staying that way.";
-    if (/legal|law|contract|attorney/.test(n)) return "Clear advice that protects your interests without the confusion.";
-    if (/childcar|daycar|babysit|nanny/.test(n)) return "Safe, nurturing care you can feel good about every day.";
-    if (/pest|exterminate|rodent|bug/.test(n)) return "Effective treatment with minimal disruption to your home or business.";
-    if (/paint|coat|finish|stain/.test(n)) return "Clean lines and lasting results that make a visible difference.";
-    if (/move|relocat|haul|junk/.test(n)) return "Efficient, careful service that takes the stress out of moving.";
-    if (/print|sign|banner|wrap/.test(n)) return "Sharp, attention-grabbing materials that represent your brand.";
-    if (/insur|protect|coverage|policy/.test(n)) return "Simple, straightforward coverage that fits your life.";
-    if (/real estate|property|rent|lease|home buy/.test(n)) return "Honest guidance through one of the biggest decisions you'll make.";
-    return "Delivered with care and consistent attention to quality.";
+
+    // Home entertainment / media box — ordered from most specific to least
+    if (/media.?box.?sale|box.?sale|device.?sale|sell.?box/.test(n))
+      return "Choose from available home entertainment streaming devices — setup guidance included.";
+    if (/tv.?box.?setup|set.?up.?tv|box.?setup|setup.?box/.test(n))
+      return "Get your device connected to your TV and ready to stream in just a few steps.";
+    if (/wi.?fi.?connect|wifi.?connect|connect.*(wi.?fi|wifi)|internet.?connect/.test(n))
+      return "Make sure your device is online, connected to the right network, and ready to stream.";
+    if (/remote.?setup|setup.?remote|remote.?program|pair.?remote/.test(n))
+      return "Learn how to use your remote, navigate the menus, and control your device with ease.";
+    if (/walkthrough|walk.?through|device.?tour|how.?to.?use/.test(n))
+      return "Get a clear step-by-step walkthrough of your device right after setup — no guessing.";
+    if (/troubleshoot|trouble.?shoot|not.?work|not.?connect|fix.?device/.test(n))
+      return "Get hands-on help when your device won't connect, freezes, or isn't working correctly.";
+    if (/customer.?support|after.?setup.?support|ongoing.?support|follow.?up/.test(n))
+      return "Ask questions after setup — because support doesn't stop when the box is plugged in.";
+    if (/streaming.?help|stream.?setup|streaming.?service/.test(n))
+      return "Get help finding and launching your approved streaming apps and channels.";
+    if (/media.?box|tv.?box|set.?top|iptv|streaming.?device|entertainment.?box/.test(n))
+      return "Professional setup and support for your home entertainment streaming device.";
+
+    // Lawn & outdoor
+    if (/lawn.?care|lawn.?service|lawn.?mainten/.test(n)) return "Consistent, scheduled care that keeps your lawn looking healthy all season.";
+    if (/mow|grass.?cut|cut.?grass/.test(n)) return "Reliable mowing on a schedule so your lawn never gets away from you.";
+    if (/landscap/.test(n)) return "Custom landscaping design and maintenance that adds real curb appeal.";
+    if (/tree.?trim|tree.?remov|tree.?service/.test(n)) return "Safe, clean tree trimming and removal done by experienced hands.";
+    if (/mulch|sod|seed|aerat/.test(n)) return "Give your lawn what it needs to grow thick and stay green.";
+    if (/pressure.?wash|power.?wash/.test(n)) return "Blast away grime, mold, and buildup from driveways, decks, and siding.";
+
+    // Cleaning
+    if (/deep.?clean/.test(n)) return "A thorough top-to-bottom clean that gets the spots regular cleaning misses.";
+    if (/move.?in|move.?out|vacant/.test(n)) return "Leave the place spotless — whether you're moving in or handing over the keys.";
+    if (/recurring|regular|weekly|bi.?weekly|monthly.?clean/.test(n)) return "Scheduled cleaning so you never have to think about it — just come home to clean.";
+    if (/clean|sanitiz|janitorial|housekeep|maid/.test(n)) return "Thorough, dependable cleaning you won't have to think twice about.";
+
+    // Plumbing
+    if (/leak.?repair|fix.?leak/.test(n)) return "Stop leaks fast before they turn into bigger, more expensive problems.";
+    if (/drain.?clean|unclog|clog/.test(n)) return "Clear clogs and keep your drains flowing without the mess or hassle.";
+    if (/water.?heat|boiler/.test(n)) return "Water heater installation and repair to keep hot water running reliably.";
+    if (/plumb|pipe|drain|leak|faucet|toilet|sewer/.test(n)) return "Fast, reliable repairs that get your plumbing back to normal.";
+
+    // Electrical
+    if (/panel|breaker|circuit/.test(n)) return "Safe panel upgrades and breaker work done to code.";
+    if (/outlet|switch|wiring/.test(n)) return "New outlets and switches installed cleanly and safely.";
+    if (/light|ceiling.?fan|fixture/.test(n)) return "Lighting and fan installation that improves comfort and saves energy.";
+    if (/electric|wiring|generator/.test(n)) return "Code-compliant electrical work done right by licensed professionals.";
+
+    // Tech support (general)
+    if (/computer.?setup|laptop.?setup|pc.?setup/.test(n)) return "Get your computer configured, updated, and ready to use from day one.";
+    if (/virus|malware|security.?scan/.test(n)) return "Scan, clean, and protect your device against threats and slowdowns.";
+    if (/wi.?fi|wifi|router|network/.test(n)) return "Get your home or office network set up and connected reliably.";
+    if (/phone.?setup|phone.?transfer|data.?transfer/.test(n)) return "Move your contacts, photos, and apps to a new phone without losing anything.";
+    if (/printer|scanner/.test(n)) return "Get your printer or scanner connected and working — no more error messages.";
+    if (/tech.?support|it.?support|computer.?help/.test(n)) return "Friendly, no-jargon help for everyday tech problems and questions.";
+
+    // Digital marketing / web
+    if (/seo/.test(n)) return "Improve your search rankings so the right people can find you online.";
+    if (/social.?media|instagram|facebook/.test(n)) return "Consistent, on-brand content that grows your following and drives engagement.";
+    if (/google.?ads|ppc|paid.?ads/.test(n)) return "Targeted ad campaigns that bring in leads without wasting your budget.";
+    if (/email.?market/.test(n)) return "Email campaigns that stay in touch with customers and bring them back.";
+    if (/website|web.?design|web.?dev/.test(n)) return "A professional website that represents your business and converts visitors.";
+
+    // Beauty & wellness
+    if (/haircut|hairstyle|color|highlight|balayage/.test(n)) return "Expert cuts and color in a relaxed, welcoming environment.";
+    if (/nail|manicure|pedicure/.test(n)) return "Clean, polished nails — done carefully and with quality products.";
+    if (/massage|deep.?tissue|swedish/.test(n)) return "Relieving tension and stress so you leave feeling noticeably better.";
+    if (/facial|skin|peel/.test(n)) return "Skin treatments tailored to your specific concerns and skin type.";
+    if (/lash|brow|wax/.test(n)) return "Precise, clean shaping that frames your face perfectly.";
+
+    // Fitness & wellness
+    if (/personal.?train|one.?on.?one.?train/.test(n)) return "Customized workouts with hands-on coaching to hit your specific goals.";
+    if (/yoga|pilates/.test(n)) return "Structured classes that improve flexibility, strength, and mental clarity.";
+    if (/nutrit|meal.?plan|diet/.test(n)) return "Practical nutrition guidance you can actually stick to in real life.";
+
+    // Accounting / finance
+    if (/tax.?prep|tax.?return|file.?tax/.test(n)) return "Accurate tax filing that maximizes your return and keeps you compliant.";
+    if (/bookkeep/.test(n)) return "Organized, up-to-date books so you always know where your money stands.";
+    if (/payroll/.test(n)) return "Payroll handled on time, every time — no missed payments, no penalties.";
+    if (/financ.?plan|budget|forecast/.test(n)) return "Clear financial planning so you can make confident business decisions.";
+
+    // Childcare & education
+    if (/tutoring|homework.?help|test.?prep/.test(n)) return "Patient, effective instruction that builds real understanding and confidence.";
+    if (/daycar|childcar|babysit/.test(n)) return "Safe, attentive care your child will look forward to.";
+    if (/after.?school/.test(n)) return "Supervised, structured care between school and home pickup.";
+
+    // Moving & logistics
+    if (/pack|unpack/.test(n)) return "Careful packing and unpacking so nothing gets lost or damaged.";
+    if (/junk.?remov|haul.?away|trash/.test(n)) return "Fast haul-away of unwanted items — you point, we take it.";
+    if (/storage/.test(n)) return "Secure short- or long-term storage while you're between spaces.";
+    if (/mov/.test(n)) return "Efficient, careful moving that takes the stress out of the whole process.";
+
+    // Home improvement
+    if (/paint.?interior|interior.?paint/.test(n)) return "Clean, even coats that transform a room without the mess or fumes.";
+    if (/paint.?exterior|exterior.?paint/.test(n)) return "Weatherproof exterior painting that protects your home and improves curb appeal.";
+    if (/drywall/.test(n)) return "Seamless drywall repair and installation with a smooth, paint-ready finish.";
+    if (/flooring|hardwood|tile.?install/.test(n)) return "Durable flooring installed correctly so it looks great and lasts.";
+    if (/roof|gutter/.test(n)) return "Roof and gutter work that protects your home from water damage.";
+    if (/fence|deck|patio/.test(n)) return "Outdoor structures built to last through years of weather and use.";
+    if (/handyman|odd.?job|home.?repair/.test(n)) return "Small fixes and projects handled quickly so they stop being on your to-do list.";
+
+    // Delivery
+    if (/same.?day/.test(n)) return "Same-day delivery for time-sensitive orders and urgent pickups.";
+    if (/deliver|ship|courier/.test(n)) return "Reliable pickup and delivery, tracked and on schedule.";
+
+    // Events
+    if (/wedding/.test(n)) return "Full coordination and day-of support so you can enjoy every moment of your wedding.";
+    if (/cater/.test(n)) return "Fresh, made-to-order food that feeds your guests and impresses every time.";
+    if (/decor|floral|design/.test(n)) return "Custom event styling that turns any venue into the right atmosphere.";
+    if (/photo.?booth|entertai/.test(n)) return "Fun, memorable entertainment that keeps guests engaged all night.";
+
+    // Real estate
+    if (/buy|purchas/.test(n)) return "Guided support through the buying process so you make a confident, informed decision.";
+    if (/sell|list/.test(n)) return "Strategic pricing and marketing to sell your property quickly and at full value.";
+    if (/rent|property.?manag/.test(n)) return "Hassle-free rental management — tenant screening, maintenance, and collections.";
+
+    // Legal
+    if (/notary/.test(n)) return "Fast, professional notarization for documents that need to be official.";
+    if (/contract/.test(n)) return "Contracts reviewed and drafted clearly so you know exactly what you're agreeing to.";
+    if (/estate.?plan|will|trust/.test(n)) return "Protect your assets and family's future with a clear, properly structured plan.";
+
+    // Generic fallback — still specific to the name
+    return `Professional ${name.toLowerCase()} — handled with care and attention to detail.`;
   };
 
   // --- Homepage sections by type ---
@@ -518,37 +684,42 @@ function OutputView({
   };
   const sectionsList = getSections();
 
-  // --- Hero headline: benefit-focused, audience used for context only ---
+  // --- Hero headline: benefit-focused using detected service theme ---
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
   const getHeadline = (): string => {
     if (isMenuContext) {
+      // Use the first food item if available, otherwise generic
       return coreService
-        ? `${bizName} — ${coreService} Worth Coming Back For`
-        : `${bizName} — Good Food, Done Right`;
+        ? `${bizName} — ${cap(coreService)} Worth Coming Back For`
+        : `${bizName} — Fresh Food, Honest Flavor`;
     }
     switch (orgType) {
       case "nonprofit":
         return cleanGoal
-          ? `${bizName} — ${cleanGoal.charAt(0).toUpperCase() + cleanGoal.slice(1)}`
-          : `${bizName} — Making a Difference`;
+          ? `${bizName} — ${cap(cleanGoal)}`
+          : `${bizName} — Making a Lasting Difference`;
       case "local service business":
-        if (coreService && location) return `${bizName} — Reliable ${coreService} in ${location}`;
-        if (coreService) return `${bizName} — ${coreService} Done Right`;
-        return `${bizName} — Dependable Service You Can Count On`;
+        // Always use theme-based benefit phrase — never "[Service] Done Right"
+        return `${bizName} — ${getBenefitHeadline()}`;
       case "personal brand":
         return cleanGoal
-          ? `${bizName} — ${cleanGoal.charAt(0).toUpperCase() + cleanGoal.slice(1)}`
-          : `${bizName} — Helping You Move Forward`;
+          ? `${bizName} — ${cap(cleanGoal)}`
+          : serviceTheme !== "general"
+            ? `${bizName} — ${getBenefitHeadline()}`
+            : `${bizName} — Helping You Move Forward`;
       case "product shop":
-        return coreService
-          ? `${bizName} — ${coreService} Built to Last`
-          : `${bizName} — Quality Products, Simple Process`;
+        return serviceTheme !== "general"
+          ? `${bizName} — ${getBenefitHeadline()}`
+          : coreService
+            ? `${bizName} — ${cap(coreService)} That Speaks for Itself`
+            : `${bizName} — Quality Products, Simple Process`;
       case "community project":
         return location
           ? `${bizName} — Rooted in ${location}`
           : `${bizName} — Stronger Together`;
       default:
-        return coreService
-          ? `${bizName} — Professional ${coreService} That Delivers`
+        return serviceTheme !== "general"
+          ? `${bizName} — ${getBenefitHeadline()}`
           : `${bizName} — Built to Serve`;
     }
   };
