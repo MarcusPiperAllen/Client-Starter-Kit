@@ -931,9 +931,8 @@ ${servicesList.length > 0 ? servicesList.map(s => `- ${s}`).join("\n") : "- [Add
                 <h2>${servicesSectionTitle}</h2>
                 <div class="service-grid">
                     ${servicesList.length > 0
-                      ? servicesList.map(s => `<div class="service-card"><h3>${s}</h3></div>`).join("\n                    ")
-                      : `<div class="service-card"><h3>[Service 1]</h3></div>
-                    <div class="service-card"><h3>[Service 2]</h3></div>`}
+                      ? servicesList.map(s => `<div class="service-card">\n                        <h3>${s}</h3>\n                        <p>${describeService(s)}</p>\n                    </div>`).join("\n                    ")
+                      : `<div class="service-card">\n                        <h3>[Service 1]</h3>\n                        <p>[Service description]</p>\n                    </div>\n                    <div class="service-card">\n                        <h3>[Service 2]</h3>\n                        <p>[Service description]</p>\n                    </div>`}
                 </div>
             </div>
         </section>
