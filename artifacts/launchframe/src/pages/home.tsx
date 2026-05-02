@@ -460,6 +460,50 @@ function OutputView({
     : orgType === "personal brand" ? "What I Offer"
     : "What We Offer";
 
+  // --- Derived copy helpers ---
+  // Strip leading "to " and trailing period from goal for inline use
+  const cleanGoal = goalDisplay.replace(/^to\s+/i, "").replace(/\.$/, "").toLowerCase();
+
+  // First listed service — used to anchor benefit-focused copy
+  const coreService = servicesList.length > 0 ? servicesList[0] : null;
+
+  // Try to pull a location/city out of the audience field
+  // e.g. "Families in Memphis" → "Memphis"  |  "homeowners in the Dallas area" → "Dallas area"
+  const extractLocation = (text: string): string | null => {
+    const m = text.match(/\bin\s+(?:the\s+)?([A-Z][a-zA-Z\s\-]+?)(?:\s+(?:area|region|community|metro)|[,.]|$)/);
+    return m ? m[1].trim() : null;
+  };
+  const location = extractLocation(audience);
+
+  // Describe a service item in one line based on keywords in its name
+  const describeService = (name: string): string => {
+    const n = name.toLowerCase();
+    if (/lawn|mow|landscap|yard|grass/.test(n)) return "Keep your outdoor spaces looking their best year-round.";
+    if (/clean|sanitiz|janitorial|housekeep/.test(n)) return "Thorough, dependable cleaning you won't have to think twice about.";
+    if (/book|account|payroll|tax|financ/.test(n)) return "Accurate and organized so you can focus on running your business.";
+    if (/plumb|pipe|drain|leak/.test(n)) return "Fast, reliable repairs that get your home back to normal.";
+    if (/electric|wiring|panel|outlet/.test(n)) return "Safe, code-compliant work done by experienced professionals.";
+    if (/coach|consult|strateg|advise/.test(n)) return "Practical guidance that moves the needle on what matters most.";
+    if (/design|brand|logo|graphic/.test(n)) return "Visuals that represent you well and leave a lasting impression.";
+    if (/photo|video|film|edit/.test(n)) return "High-quality content that tells your story with clarity and style.";
+    if (/tutor|teach|train|educat/.test(n)) return "Clear, patient instruction tailored to where you are right now.";
+    if (/web|site|seo|digital|market/.test(n)) return "Online presence that brings in the right people at the right time.";
+    if (/hair|nail|salon|spa|massage|beauty/.test(n)) return "Professional care in a welcoming, relaxing environment.";
+    if (/repair|fix|install|maintain/.test(n)) return "Handled properly the first time — no callbacks, no excuses.";
+    if (/deliver|ship|transport|logistic/.test(n)) return "Reliable pickup and delivery, on your schedule.";
+    if (/event|wedding|party|celebrat/.test(n)) return "Expertly coordinated so you can enjoy every moment.";
+    if (/health|fitness|nutrit|wellness/.test(n)) return "Practical support for feeling better and staying that way.";
+    if (/legal|law|contract|attorney/.test(n)) return "Clear advice that protects your interests without the confusion.";
+    if (/childcar|daycar|babysit|nanny/.test(n)) return "Safe, nurturing care you can feel good about every day.";
+    if (/pest|exterminate|rodent|bug/.test(n)) return "Effective treatment with minimal disruption to your home or business.";
+    if (/paint|coat|finish|stain/.test(n)) return "Clean lines and lasting results that make a visible difference.";
+    if (/move|relocat|haul|junk/.test(n)) return "Efficient, careful service that takes the stress out of moving.";
+    if (/print|sign|banner|wrap/.test(n)) return "Sharp, attention-grabbing materials that represent your brand.";
+    if (/insur|protect|coverage|policy/.test(n)) return "Simple, straightforward coverage that fits your life.";
+    if (/real estate|property|rent|lease|home buy/.test(n)) return "Honest guidance through one of the biggest decisions you'll make.";
+    return "Delivered with care and consistent attention to quality.";
+  };
+
   // --- Homepage sections by type ---
   const getSections = (): string[] => {
     if (isMenuContext) return ["Hero", "Menu Highlights", "About", "Book or Order", "Contact"];
@@ -474,83 +518,132 @@ function OutputView({
   };
   const sectionsList = getSections();
 
-  // --- Hero copy: natural, type-specific, no awkward templates ---
+  // --- Hero headline: benefit-focused, audience used for context only ---
   const getHeadline = (): string => {
-    if (isMenuContext) return `${bizName} — Real Food, Made for ${audienceDisplay}`;
+    if (isMenuContext) {
+      return coreService
+        ? `${bizName} — ${coreService} Worth Coming Back For`
+        : `${bizName} — Good Food, Done Right`;
+    }
     switch (orgType) {
-      case "nonprofit": return `${bizName} — ${goalDisplay.replace(/^to\s+/i, "").replace(/\.$/, "")}`;
-      case "local service business": return `${bizName} — Trusted by ${audienceDisplay}`;
-      case "personal brand": return `${bizName} — Helping ${audienceDisplay} Move Forward`;
-      case "product shop": return `${bizName} — Made for ${audienceDisplay}`;
-      case "community project": return `${bizName} — Where ${audienceDisplay} Come Together`;
-      default: return `${bizName} — Serving ${audienceDisplay}`;
+      case "nonprofit":
+        return cleanGoal
+          ? `${bizName} — ${cleanGoal.charAt(0).toUpperCase() + cleanGoal.slice(1)}`
+          : `${bizName} — Making a Difference`;
+      case "local service business":
+        if (coreService && location) return `${bizName} — Reliable ${coreService} in ${location}`;
+        if (coreService) return `${bizName} — ${coreService} Done Right`;
+        return `${bizName} — Dependable Service You Can Count On`;
+      case "personal brand":
+        return cleanGoal
+          ? `${bizName} — ${cleanGoal.charAt(0).toUpperCase() + cleanGoal.slice(1)}`
+          : `${bizName} — Helping You Move Forward`;
+      case "product shop":
+        return coreService
+          ? `${bizName} — ${coreService} Built to Last`
+          : `${bizName} — Quality Products, Simple Process`;
+      case "community project":
+        return location
+          ? `${bizName} — Rooted in ${location}`
+          : `${bizName} — Stronger Together`;
+      default:
+        return coreService
+          ? `${bizName} — Professional ${coreService} That Delivers`
+          : `${bizName} — Built to Serve`;
     }
   };
 
+  // --- Hero subheadline: explains what they do, no raw audience paste ---
   const getSubheadline = (): string => {
-    if (isMenuContext) return `Scratch-made flavors, brought to your event or table. ${ctaUpper} today.`;
+    if (isMenuContext) {
+      return `Fresh, made-to-order food for events, gatherings, and everyday cravings. ${ctaUpper} today.`;
+    }
+    // Build a natural "what we do" sentence from services + goal
+    const offeringPhrase = servicesList.length >= 2
+      ? `${servicesList[0]} and ${servicesList[1].toLowerCase()}`
+      : coreService
+        ? coreService.toLowerCase()
+        : "quality service";
+    const locationPhrase = location ? ` in the ${location} area` : "";
+
     const byTone: Record<string, string> = {
-      professional: `Serving ${audienceDisplay} with expertise and care. ${ctaUpper} today.`,
-      bold: `${goalDisplay.replace(/^to\s+/i, "").replace(/\.$/, "")}. No shortcuts. ${ctaUpper} now.`,
-      elegant: `Thoughtful, refined service for ${audienceDisplay}. ${ctaUpper} and experience the difference.`,
-      warm: `We're here for ${audienceDisplay} — every step of the way. ${ctaUpper} whenever you're ready.`,
-      playful: `Helping ${audienceDisplay} since day one — and having a great time doing it! ${ctaUpper}.`,
-      "faith-based": `Rooted in faith, serving ${audienceDisplay} with purpose and compassion. ${ctaUpper}.`,
-      "community-focused": `Built by ${audienceDisplay}, for ${audienceDisplay}. Together we make it happen. ${ctaUpper}.`,
+      professional: `Providing ${offeringPhrase}${locationPhrase} with professionalism and reliability. ${ctaUpper} today.`,
+      bold: `${offeringPhrase.charAt(0).toUpperCase() + offeringPhrase.slice(1)}${locationPhrase} — done with no compromise. ${ctaUpper} now.`,
+      elegant: `Refined ${offeringPhrase}${locationPhrase}, delivered with care and precision. ${ctaUpper}.`,
+      warm: `We specialize in ${offeringPhrase}${locationPhrase} and treat every client like a neighbor. ${ctaUpper} whenever you're ready.`,
+      playful: `We do ${offeringPhrase}${locationPhrase} — and we actually love doing it. ${ctaUpper}!`,
+      "faith-based": `Offering ${offeringPhrase}${locationPhrase} with integrity and a heart for service. ${ctaUpper}.`,
+      "community-focused": `${offeringPhrase.charAt(0).toUpperCase() + offeringPhrase.slice(1)}${locationPhrase}, built around the people we serve. ${ctaUpper}.`,
     };
-    return byTone[toneDisplay] ?? `Serving ${audienceDisplay} with excellence. ${ctaUpper} today.`;
+    return byTone[toneDisplay] ?? `Professional ${offeringPhrase}${locationPhrase}. ${ctaUpper} today.`;
   };
 
   const headline = getHeadline();
   const subheadline = getSubheadline();
 
-  // --- About section: tone-aware, no filler ---
+  // --- About section: human tone, service-grounded, goal-specific ---
   const getAbout = (): string => {
+    const offeringList = servicesList.length > 0
+      ? servicesList.slice(0, 3).join(", ").toLowerCase()
+      : "quality services";
+    const goalSentence = cleanGoal ? ` We started ${bizName} with one goal in mind: ${cleanGoal}.` : "";
+
     const byTone: Record<string, string> = {
-      professional: `${bizName} is a ${orgType || "organization"} dedicated to serving ${audienceDisplay} with expertise and integrity.`,
-      bold: `${bizName} doesn't do average. We're here to ${goalDisplay.replace(/^to\s+/i, "").replace(/\.$/, "")} — and we do it at a level that speaks for itself.`,
-      elegant: `At ${bizName}, every detail matters. We exist to bring ${audienceDisplay} an experience that is as refined as it is meaningful.`,
-      warm: `${bizName} was built around one idea: ${audienceDisplay} deserve genuine care. We show up for our clients the way a neighbor shows up — with warmth and without hesitation.`,
-      playful: `We're ${bizName} — and we genuinely love what we do. From day one, we've been here for ${audienceDisplay}, one moment at a time.`,
-      "faith-based": `${bizName} is grounded in faith and called to serve ${audienceDisplay} with compassion, integrity, and purpose in every interaction.`,
-      "community-focused": `${bizName} is built by and for ${audienceDisplay}. We believe that when people come together, extraordinary things happen.`,
+      professional:
+        `${bizName} is a ${orgType || "business"} specializing in ${offeringList}.${goalSentence} We take pride in doing the work right and standing behind everything we deliver.`,
+      bold:
+        `${bizName} is built on one standard: no shortcuts.${goalSentence} We offer ${offeringList} because we believe people deserve work that actually holds up.`,
+      elegant:
+        `${bizName} brings together ${offeringList} under one roof — with the kind of attention to detail that makes a real difference.${goalSentence}`,
+      warm:
+        `${bizName} was started because we saw a real need — and we knew we could help.${goalSentence} We specialize in ${offeringList} and treat every client the way we'd want to be treated ourselves.`,
+      playful:
+        `We're ${bizName}, and we genuinely love what we do.${goalSentence} Whether it's ${offeringList}, we show up ready and make sure you leave happy.`,
+      "faith-based":
+        `${bizName} was founded on faith and a calling to serve.${goalSentence} We provide ${offeringList} with honesty, compassion, and a commitment to doing what's right.`,
+      "community-focused":
+        `${bizName} is part of this community — not just a business in it.${goalSentence} We offer ${offeringList} because we believe local matters and people deserve reliable help close to home.`,
     };
-    const intro = byTone[toneDisplay] ?? `${bizName} is committed to serving ${audienceDisplay} with quality and care.`;
-    const goalLine = goalDisplay ? ` Our goal: ${goalDisplay.replace(/^to\s+/i, "").replace(/\.$/, "")}.` : "";
-    return `${intro}${goalLine}`;
+    return byTone[toneDisplay] ?? `${bizName} provides ${offeringList} with a focus on quality and dependability.${goalSentence}`;
   };
 
-  // --- Services / Menu section ---
+  // --- Services section: each item gets a one-line description ---
   const getServicesDraft = (): string => {
-    if (servicesList.length === 0) return "Add your services, programs, or products in the form above — they'll appear here.";
+    if (servicesList.length === 0) {
+      return "Add your services, programs, or products in the form above — they'll appear here.";
+    }
     if (isMenuContext) {
-      const intro = `Here's a taste of what ${bizName} brings to the table:`;
+      const intro = `Here's a look at what ${bizName} brings to the table:`;
       return `${intro}\n\n${servicesList.map(s => `• ${s}`).join("\n")}`;
     }
-    const byOrgType: Record<string, string> = {
-      nonprofit: "Our programs create real impact:",
-      "personal brand": "Here's how I can help:",
-      "product shop": "Our featured products:",
-      "local service business": "Our services, done right:",
-      "community project": "Ways to get involved:",
+    const introByType: Record<string, string> = {
+      nonprofit: "Our programs are designed to create lasting change:",
+      "personal brand": "Here's how I can help you:",
+      "product shop": "Our products are built with you in mind:",
+      "local service business": "We handle it all — here's what we do:",
+      "community project": "Get involved and make a difference:",
     };
-    const intro = byOrgType[orgType] ?? `${bizName} offers:`;
-    return `${intro}\n\n${servicesList.map(s => `• ${s}`).join("\n")}`;
+    const intro = introByType[orgType] ?? `Here's what ${bizName} offers:`;
+    const items = servicesList
+      .map(s => `• ${s}\n  ${describeService(s)}`)
+      .join("\n\n");
+    return `${intro}\n\n${items}`;
   };
 
-  // --- CTA section: specific language, no "achieve goals together" ---
+  // --- CTA section ---
   const getCtaDraft = (): string => {
+    const locationNote = location ? ` in ${location}` : "";
     const byCtaKey: Record<string, string> = {
-      "book a call": `Ready to talk? Schedule a call and let's figure out exactly what you need.`,
-      "book catering": `Planning an event? Let ${bizName} handle the food. Fill out a request and we'll follow up with everything you need.`,
-      "request a quote": `Every project is different. Tell us about yours and we'll send over a custom quote — no pressure.`,
-      "view menu": `See what's on the menu, what's seasonal, and what ${bizName} does best.`,
-      "donate": `Your support changes lives. Every contribution goes directly toward ${goalDisplay.replace(/^to\s+/i, "").replace(/\.$/, "")}.`,
-      "contact us": `Questions? We'd love to hear from you. Reach out and let's start a real conversation.`,
-      "shop now": `Browse our full selection and find exactly what you're looking for.`,
-      "learn more": `Curious about ${bizName}? Explore what we offer and see if we're the right fit.`,
+      "book a call": `Ready to talk? Schedule a call and we'll figure out exactly what you need — no pressure, no runaround.`,
+      "book catering": `Planning an event${locationNote}? Let ${bizName} handle the food. Fill out a request and we'll take it from there.`,
+      "request a quote": `Every job is different. Tell us about yours and we'll get you a straight answer and a fair quote.`,
+      "view menu": `Take a look at what ${bizName} is serving — fresh options, consistent quality, and something for everyone.`,
+      "donate": `Your contribution goes directly toward ${cleanGoal || "the work that matters most"}. Every dollar makes a difference.`,
+      "contact us": `Have a question? We're easy to reach and happy to help. Send us a message and we'll get back to you promptly.`,
+      "shop now": `Browse our full selection and find what you're looking for — straightforward, no-nonsense shopping.`,
+      "learn more": `Want to know more about ${bizName} and what we do? Take a look around — we think you'll find it worth your time.`,
     };
-    return byCtaKey[cta] ?? `${bizName} is here for ${audienceDisplay}. Reach out and let's get started.`;
+    return byCtaKey[cta] ?? `${bizName} is ready to help. Reach out and let's get started.`;
   };
 
   const contactDraft = [
