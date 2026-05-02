@@ -220,6 +220,7 @@ export default function Home() {
                 data-testid="textarea-goal"
                 className="resize-none"
               />
+              <p className="text-xs text-muted-foreground">What do you want visitors to do or feel after seeing this site? Be specific.</p>
             </div>
 
             <div className="space-y-2">
@@ -229,9 +230,10 @@ export default function Home() {
                 name="audience"
                 value={formData.audience}
                 onChange={handleInputChange}
-                placeholder="e.g. Small business owners in Chicago"
+                placeholder="e.g. Families in Memphis looking for catering"
                 data-testid="input-audience"
               />
+              <p className="text-xs text-muted-foreground">Be specific — who exactly is this for? The more detail, the better the copy.</p>
             </div>
 
             <div className="space-y-2">
@@ -245,6 +247,7 @@ export default function Home() {
                 data-testid="textarea-services"
                 className="resize-none"
               />
+              <p className="text-xs text-muted-foreground">Separate each item with a comma. For food businesses, list menu items — they'll be grouped under "Menu Highlights" automatically.</p>
             </div>
 
             <div className="space-y-2">
@@ -254,10 +257,11 @@ export default function Home() {
                 name="pages"
                 value={formData.pages}
                 onChange={handleInputChange}
-                placeholder="e.g. About, Team, Pricing, Blog"
+                placeholder="e.g. About, Services, Pricing, Blog"
                 data-testid="textarea-pages"
                 className="resize-none"
               />
+              <p className="text-xs text-muted-foreground">List pages beyond Home and Contact — those are added automatically. Separate with commas.</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -287,6 +291,9 @@ export default function Home() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="book a call">Book a Call</SelectItem>
+                    <SelectItem value="book catering">Book Catering</SelectItem>
+                    <SelectItem value="request a quote">Request a Quote</SelectItem>
+                    <SelectItem value="view menu">View Menu</SelectItem>
                     <SelectItem value="donate">Donate</SelectItem>
                     <SelectItem value="contact us">Contact Us</SelectItem>
                     <SelectItem value="shop now">Shop Now</SelectItem>
@@ -415,61 +422,206 @@ function OutputView({
   onCopy: (text: string, title: string) => void;
 }) {
   const { businessName, orgType, goal, audience, services, pages, tone, email, phone, cta } = formData;
-  const bizName = businessName || "[Business Name]";
-  const orgTypeDisplay = orgType || "[Organization Type]";
-  const goalDisplay = goal || "[Goal]";
-  const audienceDisplay = audience || "[Audience]";
-  const toneDisplay = tone || "[Tone]";
-  const ctaDisplay = cta ? cta.toUpperCase() : "[CTA]";
 
-  const pagesList = pages
-    ? pages.split(",").map((p) => p.trim()).filter(Boolean)
-    : [];
-  const navItems = ["Home", ...pagesList, "Contact"];
+  const bizName = businessName || "Your Business";
+  const goalDisplay = goal || "build a strong online presence";
+  const audienceDisplay = audience || "your community";
+  const toneDisplay = tone || "professional";
+  const ctaLabel = cta || "get in touch";
+  const ctaUpper = ctaLabel.charAt(0).toUpperCase() + ctaLabel.slice(1);
+
+  // --- Deduplicated navigation ---
+  const norm = (s: string) => s.toLowerCase().replace(/[\s\-_]+/g, "");
+  const reservedNav = new Set(["home", "contact"]);
+  const rawPages = pages ? pages.split(",").map(p => p.trim()).filter(Boolean) : [];
+  const filteredPages = rawPages.filter(p => !reservedNav.has(norm(p)));
+  const navItems = ["Home", ...filteredPages, "Contact"];
   const navString = navItems.join(" • ");
 
-  const getSectionsForType = (type: string) => {
-    switch (type) {
-      case "nonprofit": return ["Hero", "Our Mission", "Programs", "Impact/Stories", "Get Involved", "Contact"];
-      case "product shop": return ["Hero", "Featured Products", "Categories", "Testimonials", "Newsletter", "Contact"];
-      case "personal brand": return ["Hero", "About Me", "Services/Offerings", "Portfolio", "Testimonials", "Contact"];
-      case "local service business": return ["Hero", "Services", "Why Choose Us", "Service Area", "Reviews", "Contact"];
-      default: return ["Hero", "About", "Services", "Testimonials", "CTA", "Contact"];
+  // --- Food / menu context detection ---
+  const foodKeywords = [
+    "brisket","chicken","ribs","mac","potato","salad","wings","pizza","taco","burger",
+    "sandwich","soup","steak","seafood","pasta","sushi","bbq","cake","pie","dessert",
+    "appetizer","entree","platter","catering","menu","dish","food","drink","beverage",
+    "cocktail","coffee","latte","espresso","brunch","breakfast","lunch","dinner",
+    "smoked","grilled","fried","roasted","baked","pulled pork","hot dog","sub","wrap",
+  ];
+  const checkFood = (text: string) => {
+    const lower = (text || "").toLowerCase();
+    return foodKeywords.some(k => lower.includes(k));
+  };
+  const isMenuContext = checkFood(services) || checkFood(goal) || checkFood(businessName);
+
+  const servicesList = services ? services.split(",").map(s => s.trim()).filter(Boolean) : [];
+
+  const servicesSectionTitle = isMenuContext
+    ? "Menu Highlights"
+    : orgType === "nonprofit" ? "Our Programs"
+    : orgType === "personal brand" ? "What I Offer"
+    : "What We Offer";
+
+  // --- Homepage sections by type ---
+  const getSections = (): string[] => {
+    if (isMenuContext) return ["Hero", "Menu Highlights", "About", "Book or Order", "Contact"];
+    switch (orgType) {
+      case "nonprofit": return ["Hero", "Our Mission", "Programs & Services", "Impact Stories", "Get Involved", "Contact"];
+      case "product shop": return ["Hero", "Featured Products", "Why Choose Us", "Testimonials", "Newsletter Signup", "Contact"];
+      case "personal brand": return ["Hero", "About Me", "Services", "Portfolio / Work", "Testimonials", "Contact"];
+      case "local service business": return ["Hero", "Services", "Why Choose Us", "Service Area", "Customer Reviews", "Contact"];
+      case "community project": return ["Hero", "About the Project", "How to Get Involved", "Events", "Team", "Contact"];
+      default: return ["Hero", "About", "Services", "Testimonials", "Call to Action", "Contact"];
     }
   };
-  const sectionsList = getSectionsForType(orgType);
+  const sectionsList = getSections();
 
-  const headline = `${bizName} — Empowering ${audienceDisplay} to ${goalDisplay.toLowerCase()}`;
-  const subheadline = `We help ${audienceDisplay} succeed. ${ctaDisplay} today.`;
+  // --- Hero copy: natural, type-specific, no awkward templates ---
+  const getHeadline = (): string => {
+    if (isMenuContext) return `${bizName} — Real Food, Made for ${audienceDisplay}`;
+    switch (orgType) {
+      case "nonprofit": return `${bizName} — ${goalDisplay.replace(/^to\s+/i, "").replace(/\.$/, "")}`;
+      case "local service business": return `${bizName} — Trusted by ${audienceDisplay}`;
+      case "personal brand": return `${bizName} — Helping ${audienceDisplay} Move Forward`;
+      case "product shop": return `${bizName} — Made for ${audienceDisplay}`;
+      case "community project": return `${bizName} — Where ${audienceDisplay} Come Together`;
+      default: return `${bizName} — Serving ${audienceDisplay}`;
+    }
+  };
 
-  const aboutDraft = `${bizName} is a dedicated ${orgTypeDisplay} serving ${audienceDisplay}. Our mission is to ${goalDisplay.toLowerCase()}. We pride ourselves on delivering a ${toneDisplay} experience.`;
+  const getSubheadline = (): string => {
+    if (isMenuContext) return `Scratch-made flavors, brought to your event or table. ${ctaUpper} today.`;
+    const byTone: Record<string, string> = {
+      professional: `Serving ${audienceDisplay} with expertise and care. ${ctaUpper} today.`,
+      bold: `${goalDisplay.replace(/^to\s+/i, "").replace(/\.$/, "")}. No shortcuts. ${ctaUpper} now.`,
+      elegant: `Thoughtful, refined service for ${audienceDisplay}. ${ctaUpper} and experience the difference.`,
+      warm: `We're here for ${audienceDisplay} — every step of the way. ${ctaUpper} whenever you're ready.`,
+      playful: `Helping ${audienceDisplay} since day one — and having a great time doing it! ${ctaUpper}.`,
+      "faith-based": `Rooted in faith, serving ${audienceDisplay} with purpose and compassion. ${ctaUpper}.`,
+      "community-focused": `Built by ${audienceDisplay}, for ${audienceDisplay}. Together we make it happen. ${ctaUpper}.`,
+    };
+    return byTone[toneDisplay] ?? `Serving ${audienceDisplay} with excellence. ${ctaUpper} today.`;
+  };
 
-  const servicesList = services
-    ? services.split(",").map((s) => s.trim()).filter(Boolean)
-    : ["[Service 1]", "[Service 2]", "[Service 3]"];
-  const servicesDraft = servicesList.map(s => `- ${s}: High-quality support and execution.`).join("\n");
+  const headline = getHeadline();
+  const subheadline = getSubheadline();
 
-  const ctaDraft = `Ready to get started? Join ${bizName} and let's achieve your goals together.`;
+  // --- About section: tone-aware, no filler ---
+  const getAbout = (): string => {
+    const byTone: Record<string, string> = {
+      professional: `${bizName} is a ${orgType || "organization"} dedicated to serving ${audienceDisplay} with expertise and integrity.`,
+      bold: `${bizName} doesn't do average. We're here to ${goalDisplay.replace(/^to\s+/i, "").replace(/\.$/, "")} — and we do it at a level that speaks for itself.`,
+      elegant: `At ${bizName}, every detail matters. We exist to bring ${audienceDisplay} an experience that is as refined as it is meaningful.`,
+      warm: `${bizName} was built around one idea: ${audienceDisplay} deserve genuine care. We show up for our clients the way a neighbor shows up — with warmth and without hesitation.`,
+      playful: `We're ${bizName} — and we genuinely love what we do. From day one, we've been here for ${audienceDisplay}, one moment at a time.`,
+      "faith-based": `${bizName} is grounded in faith and called to serve ${audienceDisplay} with compassion, integrity, and purpose in every interaction.`,
+      "community-focused": `${bizName} is built by and for ${audienceDisplay}. We believe that when people come together, extraordinary things happen.`,
+    };
+    const intro = byTone[toneDisplay] ?? `${bizName} is committed to serving ${audienceDisplay} with quality and care.`;
+    const goalLine = goalDisplay ? ` Our goal: ${goalDisplay.replace(/^to\s+/i, "").replace(/\.$/, "")}.` : "";
+    return `${intro}${goalLine}`;
+  };
 
-  const contactDraft = `Email: ${email || "hello@example.com"}\nPhone: ${phone || "(555) 123-4567"}`;
+  // --- Services / Menu section ---
+  const getServicesDraft = (): string => {
+    if (servicesList.length === 0) return "Add your services, programs, or products in the form above — they'll appear here.";
+    if (isMenuContext) {
+      const intro = `Here's a taste of what ${bizName} brings to the table:`;
+      return `${intro}\n\n${servicesList.map(s => `• ${s}`).join("\n")}`;
+    }
+    const byOrgType: Record<string, string> = {
+      nonprofit: "Our programs create real impact:",
+      "personal brand": "Here's how I can help:",
+      "product shop": "Our featured products:",
+      "local service business": "Our services, done right:",
+      "community project": "Ways to get involved:",
+    };
+    const intro = byOrgType[orgType] ?? `${bizName} offers:`;
+    return `${intro}\n\n${servicesList.map(s => `• ${s}`).join("\n")}`;
+  };
 
-  const promptDraft = `Build a responsive multi-page website for a ${orgTypeDisplay} called "${bizName}".
-Tone: ${toneDisplay}
-Goal: ${goalDisplay}
-Target Audience: ${audienceDisplay}
+  // --- CTA section: specific language, no "achieve goals together" ---
+  const getCtaDraft = (): string => {
+    const byCtaKey: Record<string, string> = {
+      "book a call": `Ready to talk? Schedule a call and let's figure out exactly what you need.`,
+      "book catering": `Planning an event? Let ${bizName} handle the food. Fill out a request and we'll follow up with everything you need.`,
+      "request a quote": `Every project is different. Tell us about yours and we'll send over a custom quote — no pressure.`,
+      "view menu": `See what's on the menu, what's seasonal, and what ${bizName} does best.`,
+      "donate": `Your support changes lives. Every contribution goes directly toward ${goalDisplay.replace(/^to\s+/i, "").replace(/\.$/, "")}.`,
+      "contact us": `Questions? We'd love to hear from you. Reach out and let's start a real conversation.`,
+      "shop now": `Browse our full selection and find exactly what you're looking for.`,
+      "learn more": `Curious about ${bizName}? Explore what we offer and see if we're the right fit.`,
+    };
+    return byCtaKey[cta] ?? `${bizName} is here for ${audienceDisplay}. Reach out and let's get started.`;
+  };
 
-Pages needed: ${navItems.join(", ")}
-Key Services/Programs: ${servicesList.join(", ")}
-Call to Action: ${ctaDisplay}
-Contact Info: ${email}, ${phone}
+  const contactDraft = [
+    email ? `Email: ${email}` : null,
+    phone ? `Phone: ${phone}` : null,
+  ].filter(Boolean).join("\n") || "Email: hello@example.com\nPhone: (555) 123-4567";
 
-Instructions:
-- Use clean semantic HTML5 and modern CSS (flexbox/grid).
-- Make it fully mobile-responsive.
-- Include a navigation bar, hero section, about section, services list, and a footer.
-- Use a professional layout and styling that fits the "${toneDisplay}" tone.
-- Do not use any external frameworks, just pure HTML/CSS.`;
+  // --- Replit Agent Prompt: structured and immediately usable ---
+  const promptDraft = `Build a clean, fully responsive multi-page website for the following client. Use only pure HTML5 and CSS3 — no JavaScript frameworks, no CSS frameworks, no external libraries except Google Fonts.
 
+## Client
+- Business Name: ${bizName}
+- Type: ${orgType || "local service business"}
+- Brand Tone: ${toneDisplay}
+- Primary Goal: ${goalDisplay}
+- Target Audience: ${audienceDisplay}
+
+## Pages
+${navItems.map(p => `- ${p}`).join("\n")}
+
+## ${isMenuContext ? "Menu / Food Offerings" : "Services / Offerings"}
+${servicesList.length > 0 ? servicesList.map(s => `- ${s}`).join("\n") : "- [Add services or products here]"}
+
+## Copy to Use
+- Hero Headline: ${headline}
+- Hero Subheadline: ${subheadline}
+- CTA Button Label: ${ctaUpper}
+- About: ${getAbout()}
+
+## Contact
+- Email: ${email || "hello@example.com"}
+- Phone: ${phone || "(555) 123-4567"}
+
+## Technical Requirements
+- Semantic HTML5: use header, nav, main, section, footer
+- Sticky navigation with a working hamburger menu for mobile (toggle with JavaScript)
+- Fully responsive using CSS Flexbox and Grid — no horizontal scroll on any screen size
+- CSS custom properties (variables) for all colors and fonts
+- Google Fonts selected to match the "${toneDisplay}" tone
+- All sections in one scrollable page: Hero, About, ${isMenuContext ? "Menu Highlights" : "Services"}, CTA, Footer/Contact
+- Smooth scroll behavior
+- Sections accessible via nav anchor links
+- Footer with contact info and copyright`;
+
+  // --- Tone-aware font selection ---
+  const fontByTone: Record<string, { query: string; family: string }> = {
+    professional: { query: "Inter:wght@400;500;700", family: "'Inter', sans-serif" },
+    bold: { query: "Oswald:wght@500;700&family=Open+Sans:wght@400;600", family: "'Oswald', sans-serif" },
+    elegant: { query: "Playfair+Display:ital,wght@0,400;0,700;1,400&family=Lato:wght@300;400", family: "'Playfair Display', serif" },
+    warm: { query: "Lato:wght@300;400;700&family=Merriweather:wght@300;400", family: "'Lato', sans-serif" },
+    playful: { query: "Nunito:wght@400;600;800", family: "'Nunito', sans-serif" },
+    "faith-based": { query: "Merriweather:wght@300;400;700&family=Lato:wght@400;700", family: "'Merriweather', serif" },
+    "community-focused": { query: "Nunito:wght@400;600;800", family: "'Nunito', sans-serif" },
+  };
+  const font = fontByTone[toneDisplay] ?? fontByTone.professional;
+
+  // --- Tone-aware color palette ---
+  const colorByTone: Record<string, { primary: string; hover: string; bg: string; text: string; muted: string; darkBg: boolean }> = {
+    professional: { primary: "#2563eb", hover: "#1d4ed8", bg: "#f8fafc", text: "#0f172a", muted: "#475569", darkBg: false },
+    bold:         { primary: "#dc2626", hover: "#b91c1c", bg: "#0f172a", text: "#f8fafc", muted: "#94a3b8", darkBg: true },
+    elegant:      { primary: "#1e1b4b", hover: "#312e81", bg: "#faf9f7", text: "#1e1b4b", muted: "#6b7280", darkBg: false },
+    warm:         { primary: "#c2410c", hover: "#9a3412", bg: "#fffbf0", text: "#1c1917", muted: "#78716c", darkBg: false },
+    playful:      { primary: "#7c3aed", hover: "#6d28d9", bg: "#faf5ff", text: "#1e1b4b", muted: "#6b7280", darkBg: false },
+    "faith-based":       { primary: "#1d4ed8", hover: "#1e40af", bg: "#f0f9ff", text: "#0c1445", muted: "#4b5563", darkBg: false },
+    "community-focused": { primary: "#059669", hover: "#047857", bg: "#f0fdf4", text: "#052e16", muted: "#4b5563", darkBg: false },
+  };
+  const c = colorByTone[toneDisplay] ?? colorByTone.professional;
+  const headerBg = c.darkBg ? "#1e293b" : "#ffffff";
+  const navLinkColor = c.darkBg ? "#e2e8f0" : c.muted;
+
+  // --- Starter HTML ---
   const htmlDraft = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -479,114 +631,130 @@ Instructions:
     <link rel="stylesheet" href="styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=${font.query}&display=swap" rel="stylesheet">
 </head>
 <body>
+
     <header>
-        <nav class="container">
+        <nav class="container nav-inner">
             <div class="logo">${bizName}</div>
-            <ul class="nav-links">
-                ${navItems.map(item => `<li><a href="#${item.toLowerCase()}">${item}</a></li>`).join("\n                ")}
+            <button class="nav-toggle" aria-label="Toggle menu">&#9776;</button>
+            <ul class="nav-links" id="nav-links">
+                ${navItems.map(item => `<li><a href="#${item.toLowerCase().replace(/\s+/g, "-")}">${item}</a></li>`).join("\n                ")}
             </ul>
         </nav>
     </header>
 
     <main>
+
         <section class="hero" id="home">
             <div class="container">
                 <h1>${headline}</h1>
-                <p>${subheadline}</p>
-                <a href="#contact" class="btn btn-primary">${ctaDisplay}</a>
+                <p class="hero-sub">${subheadline}</p>
+                <a href="#contact" class="btn btn-primary">${ctaUpper}</a>
             </div>
         </section>
 
         <section class="about" id="about">
             <div class="container">
                 <h2>About Us</h2>
-                <p>${aboutDraft}</p>
+                <p>${getAbout()}</p>
             </div>
         </section>
 
-        <section class="services" id="services">
+        <section class="services" id="${isMenuContext ? "menu" : "services"}">
             <div class="container">
-                <h2>What We Offer</h2>
+                <h2>${servicesSectionTitle}</h2>
                 <div class="service-grid">
-                    ${servicesList.map(s => `
-                    <div class="service-card">
-                        <h3>${s}</h3>
-                        <p>High-quality support and execution tailored for you.</p>
-                    </div>`).join("")}
+                    ${servicesList.length > 0
+                      ? servicesList.map(s => `<div class="service-card"><h3>${s}</h3></div>`).join("\n                    ")
+                      : `<div class="service-card"><h3>[Service 1]</h3></div>
+                    <div class="service-card"><h3>[Service 2]</h3></div>`}
                 </div>
             </div>
         </section>
 
-        <section class="cta-section">
-            <div class="container text-center">
-                <h2>${ctaDraft}</h2>
-                <a href="#contact" class="btn btn-primary">${ctaDisplay}</a>
+        <section class="cta-section" id="cta">
+            <div class="container">
+                <h2>${getCtaDraft()}</h2>
+                <a href="#contact" class="btn btn-light">${ctaUpper}</a>
             </div>
         </section>
+
     </main>
 
     <footer id="contact">
         <div class="container">
-            <h2>Contact Us</h2>
-            <p>Email: <a href="mailto:${email}">${email}</a></p>
-            <p>Phone: <a href="tel:${phone}">${phone}</a></p>
-            <p>&copy; 2024 ${bizName}. All rights reserved.</p>
+            <h2>Contact</h2>
+            ${email ? `<p>Email: <a href="mailto:${email}">${email}</a></p>` : ""}
+            ${phone ? `<p>Phone: <a href="tel:${phone}">${phone}</a></p>` : ""}
+            <p class="copyright">&copy; ${new Date().getFullYear()} ${bizName}. All rights reserved.</p>
         </div>
     </footer>
+
+    <script>
+        const toggle = document.querySelector('.nav-toggle');
+        const links = document.getElementById('nav-links');
+        toggle.addEventListener('click', () => links.classList.toggle('open'));
+    </script>
+
 </body>
 </html>`;
 
+  // --- Starter CSS (tone-aware) ---
   const cssDraft = `:root {
-    --primary: #2563eb;
-    --primary-hover: #1d4ed8;
-    --bg-color: #f8fafc;
-    --text-main: #0f172a;
-    --text-muted: #475569;
+    --primary: ${c.primary};
+    --primary-hover: ${c.hover};
+    --bg: ${c.bg};
+    --text: ${c.text};
+    --muted: ${c.muted};
     --card-bg: #ffffff;
-    --font-sans: 'Inter', sans-serif;
+    --font: ${font.family};
 }
 
-* {
+*, *::before, *::after {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
 }
 
+html { scroll-behavior: smooth; }
+
 body {
-    font-family: var(--font-sans);
-    background-color: var(--bg-color);
-    color: var(--text-main);
-    line-height: 1.6;
+    font-family: var(--font);
+    background-color: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
 }
 
 .container {
-    max-width: 1200px;
+    max-width: 1100px;
     margin: 0 auto;
-    padding: 0 2rem;
+    padding: 0 1.5rem;
 }
 
+/* ── Navigation ── */
+
 header {
-    background: var(--card-bg);
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    background: ${headerBg};
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
     position: sticky;
     top: 0;
     z-index: 100;
 }
 
-nav {
+.nav-inner {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    height: 80px;
+    height: 72px;
 }
 
 .logo {
     font-weight: 800;
-    font-size: 1.5rem;
+    font-size: 1.4rem;
     color: var(--primary);
+    text-decoration: none;
 }
 
 .nav-links {
@@ -597,140 +765,186 @@ nav {
 
 .nav-links a {
     text-decoration: none;
-    color: var(--text-muted);
+    color: ${navLinkColor};
     font-weight: 600;
+    font-size: 0.95rem;
     transition: color 0.2s;
 }
 
-.nav-links a:hover {
+.nav-links a:hover { color: var(--primary); }
+
+.nav-toggle {
+    display: none;
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
     color: var(--primary);
 }
 
+/* ── Hero ── */
+
 .hero {
-    padding: 8rem 0;
+    padding: 7rem 0;
     text-align: center;
-    background: var(--card-bg);
+    background: ${c.darkBg ? "#1e293b" : "var(--card-bg)"};
 }
 
 .hero h1 {
-    font-size: 3.5rem;
+    font-size: clamp(2rem, 5vw, 3.25rem);
     font-weight: 800;
-    margin-bottom: 1.5rem;
     line-height: 1.2;
+    margin-bottom: 1.25rem;
+    color: ${c.darkBg ? "#f8fafc" : "var(--text)"};
 }
 
-.hero p {
-    font-size: 1.25rem;
-    color: var(--text-muted);
+.hero-sub {
+    font-size: 1.15rem;
+    color: ${c.darkBg ? "#94a3b8" : "var(--muted)"};
     max-width: 600px;
     margin: 0 auto 2.5rem;
 }
 
+/* ── Buttons ── */
+
 .btn {
     display: inline-block;
-    padding: 1rem 2rem;
+    padding: 0.9rem 2rem;
     border-radius: 0.5rem;
     text-decoration: none;
-    font-weight: 600;
-    transition: background-color 0.2s;
+    font-weight: 700;
+    font-size: 1rem;
+    transition: background-color 0.2s, transform 0.1s;
+    cursor: pointer;
+    border: none;
 }
+
+.btn:active { transform: scale(0.98); }
 
 .btn-primary {
     background-color: var(--primary);
     color: white;
 }
 
-.btn-primary:hover {
-    background-color: var(--primary-hover);
+.btn-primary:hover { background-color: var(--primary-hover); }
+
+.btn-light {
+    background-color: white;
+    color: var(--primary);
 }
 
-section {
-    padding: 6rem 0;
-}
+.btn-light:hover { background-color: #f1f5f9; }
+
+/* ── Sections ── */
+
+section { padding: 5.5rem 0; }
 
 h2 {
-    font-size: 2.5rem;
-    margin-bottom: 2rem;
+    font-size: clamp(1.75rem, 4vw, 2.5rem);
+    margin-bottom: 1.5rem;
     text-align: center;
 }
 
-.about {
-    text-align: center;
-    max-width: 800px;
+/* ── About ── */
+
+.about { text-align: center; }
+
+.about p {
+    font-size: 1.1rem;
+    color: var(--muted);
+    max-width: 700px;
     margin: 0 auto;
 }
 
-.about p {
-    font-size: 1.125rem;
-    color: var(--text-muted);
-}
+/* ── Services / Menu ── */
 
 .service-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 2rem;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1.5rem;
+    margin-top: 2rem;
 }
 
 .service-card {
     background: var(--card-bg);
+    border: 1px solid #e2e8f0;
     padding: 2rem;
-    border-radius: 1rem;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    border-radius: 0.75rem;
     text-align: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
 }
 
 .service-card h3 {
-    font-size: 1.5rem;
-    margin-bottom: 1rem;
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--text);
 }
+
+/* ── CTA Section ── */
 
 .cta-section {
     background: var(--primary);
     color: white;
+    text-align: center;
+    padding: 5.5rem 0;
 }
 
 .cta-section h2 {
-    margin-bottom: 2rem;
+    color: white;
+    max-width: 680px;
+    margin: 0 auto 2rem;
 }
 
-.cta-section .btn-primary {
-    background: white;
-    color: var(--primary);
-}
+/* ── Footer ── */
 
 footer {
-    background: var(--text-main);
+    background: #1e293b;
     color: white;
     text-align: center;
     padding: 4rem 0;
 }
 
-footer p {
-    color: #cbd5e1;
-    margin-bottom: 0.5rem;
-}
+footer h2 { color: white; margin-bottom: 1.5rem; }
 
-footer a {
-    color: white;
-    text-decoration: none;
-}
+footer p { color: #94a3b8; margin-bottom: 0.5rem; }
+
+footer a { color: #e2e8f0; text-decoration: none; }
+
+footer a:hover { color: white; }
+
+.copyright { margin-top: 2rem; font-size: 0.85rem; }
+
+/* ── Responsive ── */
 
 @media (max-width: 768px) {
+    .nav-toggle { display: block; }
+
     .nav-links {
         display: none;
+        flex-direction: column;
+        gap: 0;
+        position: absolute;
+        top: 72px;
+        left: 0;
+        right: 0;
+        background: ${headerBg};
+        border-top: 1px solid #e2e8f0;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
     }
-    
-    .hero h1 {
-        font-size: 2.5rem;
+
+    .nav-links.open { display: flex; }
+
+    .nav-links li a {
+        display: block;
+        padding: 1rem 1.5rem;
+        border-bottom: 1px solid #f1f5f9;
     }
-    
-    .hero {
-        padding: 4rem 0;
-    }
-    
-    section {
-        padding: 4rem 0;
-    }
+
+    .hero { padding: 4.5rem 0; }
+
+    section { padding: 3.5rem 0; }
+
+    .service-grid { grid-template-columns: 1fr; }
 }`;
 
   return (
@@ -749,11 +963,11 @@ footer a {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <OutputCard title="1. Suggested Navigation" content={navString} onCopy={onCopy} />
-          <OutputCard title="2. Homepage Sections" content={sectionsList.map((s, i) => `${i + 1}. ${s}`).join("\n")} onCopy={onCopy} />
+          <OutputCard title="2. Homepage Section Plan" content={sectionsList.map((s, i) => `${i + 1}. ${s}`).join("\n")} onCopy={onCopy} />
           <OutputCard title="3. Hero Copy" content={`Headline: ${headline}\n\nSubheadline: ${subheadline}`} onCopy={onCopy} />
-          <OutputCard title="4. About Section Draft" content={aboutDraft} onCopy={onCopy} />
-          <OutputCard title="5. Services/Programs Draft" content={servicesDraft} onCopy={onCopy} />
-          <OutputCard title="6. Call-to-Action Section" content={ctaDraft} onCopy={onCopy} />
+          <OutputCard title="4. About Section Draft" content={getAbout()} onCopy={onCopy} />
+          <OutputCard title={`5. ${servicesSectionTitle} Draft`} content={getServicesDraft()} onCopy={onCopy} />
+          <OutputCard title="6. Call-to-Action Section" content={getCtaDraft()} onCopy={onCopy} />
           <OutputCard title="7. Contact Section" content={contactDraft} onCopy={onCopy} className="md:col-span-2" />
         </div>
 
