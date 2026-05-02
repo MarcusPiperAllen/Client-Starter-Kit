@@ -1,11 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Copy, ArrowLeft, Loader2, Frame } from "lucide-react";
+import { Copy, ArrowLeft, Loader2, Frame, Save, RotateCcw, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface FormData {
@@ -23,7 +23,10 @@ interface FormData {
   notes: string;
 }
 
-const initialData: FormData = {
+const AUTOSAVE_KEY = "launchframe-autosave";
+const DRAFT_KEY = "launchframe-draft";
+
+const emptyData: FormData = {
   projectName: "",
   businessName: "",
   orgType: "",
@@ -38,11 +41,60 @@ const initialData: FormData = {
   notes: "",
 };
 
+function readStorage(key: string): FormData | null {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    return JSON.parse(raw) as FormData;
+  } catch {
+    return null;
+  }
+}
+
+function writeStorage(key: string, data: FormData): boolean {
+  try {
+    localStorage.setItem(key, JSON.stringify(data));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function hasDraft(): boolean {
+  try {
+    return localStorage.getItem(DRAFT_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
 export default function Home() {
   const { toast } = useToast();
-  const [formData, setFormData] = useState<FormData>(initialData);
+  const [formData, setFormData] = useState<FormData>(() => readStorage(AUTOSAVE_KEY) ?? emptyData);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isOutputMode, setIsOutputMode] = useState(false);
+  const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const [draftExists, setDraftExists] = useState<boolean>(hasDraft);
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isFirstRender = useRef(true);
+
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    setAutoSaveStatus("saving");
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(() => {
+      writeStorage(AUTOSAVE_KEY, formData);
+      setAutoSaveStatus("saved");
+      const clearTimer = setTimeout(() => setAutoSaveStatus("idle"), 2500);
+      return () => clearTimeout(clearTimer);
+    }, 800);
+    return () => {
+      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    };
+  }, [formData]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -51,6 +103,26 @@ export default function Home() {
 
   const handleSelectChange = (name: keyof FormData) => (value: string) => {
     setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleSaveDraft = () => {
+    const ok = writeStorage(DRAFT_KEY, formData);
+    if (ok) {
+      setDraftExists(true);
+      toast({ title: "Draft saved", description: "You can restore this draft anytime.", duration: 2000 });
+    } else {
+      toast({ title: "Could not save draft", description: "Storage may be unavailable.", duration: 3000, variant: "destructive" });
+    }
+  };
+
+  const handleRestoreDraft = () => {
+    const draft = readStorage(DRAFT_KEY);
+    if (draft) {
+      setFormData(draft);
+      toast({ title: "Draft restored", description: "Your saved draft has been loaded.", duration: 2000 });
+    } else {
+      toast({ title: "No draft found", description: "Save a draft first.", duration: 2000 });
+    }
   };
 
   const handleGenerate = () => {
@@ -265,21 +337,65 @@ export default function Home() {
               />
             </div>
 
-            <Button
-              className="w-full h-12 text-lg font-medium mt-8"
-              onClick={handleGenerate}
-              disabled={isGenerating}
-              data-testid="button-generate"
-            >
-              {isGenerating ? (
-                <>
-                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                  Generating Plan...
-                </>
-              ) : (
-                "Generate Website Plan"
-              )}
-            </Button>
+            <div className="pt-2 space-y-4">
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Button
+                  variant="outline"
+                  className="flex-1 h-11"
+                  onClick={handleSaveDraft}
+                  data-testid="button-save-draft"
+                >
+                  <Save className="w-4 h-4 mr-2" />
+                  Save Draft
+                </Button>
+                <Button
+                  variant="outline"
+                  className="flex-1 h-11"
+                  onClick={handleRestoreDraft}
+                  disabled={!draftExists}
+                  data-testid="button-restore-draft"
+                >
+                  <RotateCcw className="w-4 h-4 mr-2" />
+                  Restore Draft
+                </Button>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="h-5 flex items-center" data-testid="status-autosave">
+                  {autoSaveStatus === "saved" && (
+                    <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
+                      Auto-saved
+                    </span>
+                  )}
+                  {autoSaveStatus === "saving" && (
+                    <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Saving...
+                    </span>
+                  )}
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {draftExists ? "Draft available" : "No draft saved"}
+                </span>
+              </div>
+
+              <Button
+                className="w-full h-12 text-lg font-medium"
+                onClick={handleGenerate}
+                disabled={isGenerating}
+                data-testid="button-generate"
+              >
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Generating Plan...
+                  </>
+                ) : (
+                  "Generate Website Plan"
+                )}
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
