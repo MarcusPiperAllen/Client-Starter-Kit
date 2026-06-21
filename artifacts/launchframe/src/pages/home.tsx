@@ -5,7 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Copy, ArrowLeft, Loader2, Frame, Save, RotateCcw, CheckCircle2 } from "lucide-react";
+import { Copy, ArrowLeft, Loader2, Frame, Save, RotateCcw, CheckCircle2, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface FormData {
@@ -20,7 +20,15 @@ interface FormData {
   email: string;
   phone: string;
   cta: string;
+  techStack: string;
   notes: string;
+}
+
+interface ValidationErrors {
+  businessName?: string;
+  orgType?: string;
+  goal?: string;
+  audience?: string;
 }
 
 const AUTOSAVE_KEY = "launchframe-autosave";
@@ -38,6 +46,7 @@ const emptyData: FormData = {
   email: "",
   phone: "",
   cta: "",
+  techStack: "",
   notes: "",
 };
 
@@ -68,13 +77,30 @@ function hasDraft(): boolean {
   }
 }
 
+function validate(data: FormData): ValidationErrors {
+  const errors: ValidationErrors = {};
+  if (!data.businessName.trim()) errors.businessName = "Business / Organization Name is required.";
+  if (!data.orgType) errors.orgType = "Organization Type is required.";
+  if (!data.goal.trim()) errors.goal = "Primary Website Goal is required.";
+  if (!data.audience.trim()) errors.audience = "Target Audience is required.";
+  return errors;
+}
+
+const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
+
 export default function Home() {
   const { toast } = useToast();
-  const [formData, setFormData] = useState<FormData>(() => readStorage(AUTOSAVE_KEY) ?? emptyData);
+  const [formData, setFormData] = useState<FormData>(() => {
+    const saved = readStorage(AUTOSAVE_KEY);
+    if (!saved) return emptyData;
+    // Backfill techStack for saved data from before Phase 2
+    return { ...saved, techStack: saved.techStack ?? "" };
+  });
   const [isGenerating, setIsGenerating] = useState(false);
   const [isOutputMode, setIsOutputMode] = useState(false);
   const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [draftExists, setDraftExists] = useState<boolean>(hasDraft);
+  const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFirstRender = useRef(true);
 
@@ -99,10 +125,17 @@ export default function Home() {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+    // Clear the validation error for this field as the user types
+    if (name in validationErrors) {
+      setValidationErrors((prev) => ({ ...prev, [name]: undefined }));
+    }
   };
 
   const handleSelectChange = (name: keyof FormData) => (value: string) => {
     setFormData((prev) => ({ ...prev, [name]: value }));
+    if (name in validationErrors) {
+      setValidationErrors((prev) => ({ ...prev, [name]: undefined }));
+    }
   };
 
   const handleSaveDraft = () => {
@@ -118,7 +151,8 @@ export default function Home() {
   const handleRestoreDraft = () => {
     const draft = readStorage(DRAFT_KEY);
     if (draft) {
-      setFormData(draft);
+      setFormData({ ...draft, techStack: draft.techStack ?? "" });
+      setValidationErrors({});
       toast({ title: "Draft restored", description: "Your saved draft has been loaded.", duration: 2000 });
     } else {
       toast({ title: "No draft found", description: "Save a draft first.", duration: 2000 });
@@ -126,6 +160,14 @@ export default function Home() {
   };
 
   const handleGenerate = () => {
+    const errors = validate(formData);
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
+      // Scroll to first error
+      const firstErrorField = Object.keys(errors)[0];
+      document.getElementById(firstErrorField)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
     setIsGenerating(true);
     setTimeout(() => {
       setIsGenerating(false);
@@ -151,6 +193,8 @@ export default function Home() {
   if (isOutputMode) {
     return <OutputView formData={formData} onBack={handleBackToForm} onCopy={handleCopy} />;
   }
+
+  const hasErrors = Object.keys(validationErrors).length > 0;
 
   return (
     <div className="min-h-[100dvh] bg-background text-foreground py-12 px-4 sm:px-6 lg:px-8">
@@ -180,9 +224,11 @@ export default function Home() {
                 data-testid="input-project-name"
               />
             </div>
-            
+
             <div className="space-y-2">
-              <Label htmlFor="businessName">Business / Organization Name</Label>
+              <Label htmlFor="businessName">
+                Business / Organization Name <span className="text-destructive">*</span>
+              </Label>
               <Input
                 id="businessName"
                 name="businessName"
@@ -190,27 +236,50 @@ export default function Home() {
                 onChange={handleInputChange}
                 placeholder="e.g. Acme Corp"
                 data-testid="input-business-name"
+                className={validationErrors.businessName ? "border-destructive" : ""}
               />
+              {validationErrors.businessName && (
+                <p className="text-xs text-destructive flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" /> {validationErrors.businessName}
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="orgType">Organization Type</Label>
+              <Label htmlFor="orgType">
+                Organization Type <span className="text-destructive">*</span>
+              </Label>
               <Select value={formData.orgType} onValueChange={handleSelectChange("orgType")}>
-                <SelectTrigger id="orgType" data-testid="select-org-type">
+                <SelectTrigger
+                  id="orgType"
+                  data-testid="select-org-type"
+                  className={validationErrors.orgType ? "border-destructive" : ""}
+                >
                   <SelectValue placeholder="Select type..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="nonprofit">Nonprofit</SelectItem>
                   <SelectItem value="local service business">Local Service Business</SelectItem>
+                  <SelectItem value="software/app startup">Software / App Startup</SelectItem>
+                  <SelectItem value="agency/consultancy">Agency / Consultancy</SelectItem>
+                  <SelectItem value="restaurant/food">Restaurant / Food Business</SelectItem>
+                  <SelectItem value="nonprofit">Nonprofit</SelectItem>
+                  <SelectItem value="church/faith organization">Church / Faith Organization</SelectItem>
                   <SelectItem value="personal brand">Personal Brand</SelectItem>
                   <SelectItem value="product shop">Product Shop</SelectItem>
                   <SelectItem value="community project">Community Project</SelectItem>
                 </SelectContent>
               </Select>
+              {validationErrors.orgType && (
+                <p className="text-xs text-destructive flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" /> {validationErrors.orgType}
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="goal">Primary Website Goal</Label>
+              <Label htmlFor="goal">
+                Primary Website Goal <span className="text-destructive">*</span>
+              </Label>
               <Textarea
                 id="goal"
                 name="goal"
@@ -218,36 +287,67 @@ export default function Home() {
                 onChange={handleInputChange}
                 placeholder="e.g. Get more leads for our consulting services."
                 data-testid="textarea-goal"
-                className="resize-none"
+                className={`resize-none ${validationErrors.goal ? "border-destructive" : ""}`}
               />
               <p className="text-xs text-muted-foreground">What do you want visitors to do or feel after seeing this site? Be specific.</p>
+              {validationErrors.goal && (
+                <p className="text-xs text-destructive flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" /> {validationErrors.goal}
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="audience">Target Audience</Label>
+              <Label htmlFor="audience">
+                Target Audience <span className="text-destructive">*</span>
+              </Label>
               <Input
                 id="audience"
                 name="audience"
                 value={formData.audience}
                 onChange={handleInputChange}
-                placeholder="e.g. Families in Memphis looking for catering"
+                placeholder="e.g. Small business owners in Dallas looking for accounting help"
                 data-testid="input-audience"
+                className={validationErrors.audience ? "border-destructive" : ""}
               />
               <p className="text-xs text-muted-foreground">Be specific — who exactly is this for? The more detail, the better the copy.</p>
+              {validationErrors.audience && (
+                <p className="text-xs text-destructive flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" /> {validationErrors.audience}
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="services">Services, Programs, or Products</Label>
+              <Label htmlFor="services">
+                {formData.orgType === "software/app startup"
+                  ? "Key Features / Modules"
+                  : formData.orgType === "agency/consultancy"
+                  ? "Services Offered"
+                  : formData.orgType === "nonprofit" || formData.orgType === "church/faith organization"
+                  ? "Programs / Ministries / Services"
+                  : formData.orgType === "restaurant/food"
+                  ? "Menu Items / Offerings"
+                  : "Services, Programs, or Products"}
+              </Label>
               <Textarea
                 id="services"
                 name="services"
                 value={formData.services}
                 onChange={handleInputChange}
-                placeholder="e.g. Tax Consulting, Bookkeeping, Payroll"
+                placeholder={
+                  formData.orgType === "software/app startup"
+                    ? "e.g. User Dashboard, Analytics, API Access, Team Collaboration"
+                    : formData.orgType === "agency/consultancy"
+                    ? "e.g. Brand Strategy, Web Design, SEO, Content Marketing"
+                    : formData.orgType === "nonprofit"
+                    ? "e.g. Youth Mentorship, Job Training, Emergency Housing"
+                    : "e.g. Tax Consulting, Bookkeeping, Payroll"
+                }
                 data-testid="textarea-services"
                 className="resize-none"
               />
-              <p className="text-xs text-muted-foreground">Separate each item with a comma. For food businesses, list menu items — they'll be grouped under "Menu Highlights" automatically.</p>
+              <p className="text-xs text-muted-foreground">Separate each item with a comma.</p>
             </div>
 
             <div className="space-y-2">
@@ -291,6 +391,8 @@ export default function Home() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="book a call">Book a Call</SelectItem>
+                    <SelectItem value="start free trial">Start Free Trial</SelectItem>
+                    <SelectItem value="request a demo">Request a Demo</SelectItem>
                     <SelectItem value="book catering">Book Catering</SelectItem>
                     <SelectItem value="request a quote">Request a Quote</SelectItem>
                     <SelectItem value="view menu">View Menu</SelectItem>
@@ -298,9 +400,27 @@ export default function Home() {
                     <SelectItem value="contact us">Contact Us</SelectItem>
                     <SelectItem value="shop now">Shop Now</SelectItem>
                     <SelectItem value="learn more">Learn More</SelectItem>
+                    <SelectItem value="get involved">Get Involved</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="techStack">Preferred Build Type / Technology Stack</Label>
+              <Select value={formData.techStack} onValueChange={handleSelectChange("techStack")}>
+                <SelectTrigger id="techStack" data-testid="select-tech-stack">
+                  <SelectValue placeholder="Select stack..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="html-css">Simple HTML / CSS</SelectItem>
+                  <SelectItem value="html-css-js">HTML / CSS / JavaScript</SelectItem>
+                  <SelectItem value="react">React</SelectItem>
+                  <SelectItem value="nextjs">Next.js</SelectItem>
+                  <SelectItem value="replit-fullstack">Replit Full-Stack App</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">Guides the generated Replit agent prompt and starter code.</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -343,6 +463,15 @@ export default function Home() {
                 className="resize-none"
               />
             </div>
+
+            {hasErrors && (
+              <div className="rounded-lg border border-destructive/50 bg-destructive/5 px-4 py-3">
+                <p className="text-sm text-destructive font-medium flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  Please fill in the required fields before generating.
+                </p>
+              </div>
+            )}
 
             <div className="pt-2 space-y-4">
               <div className="flex flex-col sm:flex-row gap-3">
@@ -410,7 +539,9 @@ export default function Home() {
   );
 }
 
-// --- Output View Component ---
+// ---------------------------------------------------------------------------
+// Output View
+// ---------------------------------------------------------------------------
 
 function OutputView({
   formData,
@@ -421,16 +552,16 @@ function OutputView({
   onBack: () => void;
   onCopy: (text: string, title: string) => void;
 }) {
-  const { businessName, orgType, goal, audience, services, pages, tone, email, phone, cta } = formData;
+  const { businessName, orgType, goal, audience, services, pages, tone, email, phone, cta, techStack } = formData;
 
   const bizName = businessName || "Your Business";
   const goalDisplay = goal || "build a strong online presence";
   const audienceDisplay = audience || "your community";
   const toneDisplay = tone || "professional";
   const ctaLabel = cta || "get in touch";
-  const ctaUpper = ctaLabel.charAt(0).toUpperCase() + ctaLabel.slice(1);
+  const ctaUpper = cap(ctaLabel);
 
-  // --- Deduplicated navigation ---
+  // --- Navigation ---
   const norm = (s: string) => s.toLowerCase().replace(/[\s\-_]+/g, "");
   const reservedNav = new Set(["home", "contact"]);
   const rawPages = pages ? pages.split(",").map(p => p.trim()).filter(Boolean) : [];
@@ -438,7 +569,17 @@ function OutputView({
   const navItems = ["Home", ...filteredPages, "Contact"];
   const navString = navItems.join(" • ");
 
-  // --- Food / menu context detection ---
+  const servicesList = services ? services.split(",").map(s => s.trim()).filter(Boolean) : [];
+
+  // --- Food/menu context: ONLY true for restaurant/food org type, or when org type is unspecified ---
+  // This prevents food template bleed into SaaS, nonprofit, agency, etc.
+  const isRestaurantType = orgType === "restaurant/food";
+  const isSaasType = orgType === "software/app startup";
+  const isAgencyType = orgType === "agency/consultancy";
+  const isNonprofitType = orgType === "nonprofit";
+  const isChurchType = orgType === "church/faith organization";
+  const isPersonalBrand = orgType === "personal brand";
+
   const foodKeywords = [
     "brisket","chicken","ribs","mac","potato","salad","wings","pizza","taco","burger",
     "sandwich","soup","steak","seafood","pasta","sushi","bbq","cake","pie","dessert",
@@ -450,36 +591,40 @@ function OutputView({
     const lower = (text || "").toLowerCase();
     return foodKeywords.some(k => lower.includes(k));
   };
-  const isMenuContext = checkFood(services) || checkFood(goal) || checkFood(businessName);
 
-  const servicesList = services ? services.split(",").map(s => s.trim()).filter(Boolean) : [];
+  // Food context is TRUE only when org type is restaurant/food, or when no org type is set AND food keywords appear
+  const isMenuContext = isRestaurantType || (!orgType && (checkFood(services) || checkFood(goal) || checkFood(businessName)));
 
-  const servicesSectionTitle = isMenuContext
-    ? "Menu Highlights"
-    : orgType === "nonprofit" ? "Our Programs"
-    : orgType === "personal brand" ? "What I Offer"
+  // --- Section title ---
+  const servicesSectionTitle =
+    isMenuContext ? "Menu Highlights"
+    : isSaasType ? "Features"
+    : isAgencyType ? "Our Services"
+    : isNonprofitType ? "Our Programs"
+    : isChurchType ? "Ministries & Programs"
+    : isPersonalBrand ? "What I Offer"
     : "What We Offer";
 
   // --- Derived copy helpers ---
-  // Strip leading "to " and trailing period from goal for inline use
   const cleanGoal = goalDisplay.replace(/^to\s+/i, "").replace(/\.$/, "").toLowerCase();
-
-  // First listed service — used to anchor benefit-focused copy
   const coreService = servicesList.length > 0 ? servicesList[0] : null;
-
-  // All services joined — used for theme detection across the full list
   const allServicesText = servicesList.join(" ").toLowerCase();
 
-  // Try to pull a location/city out of the audience field
-  // e.g. "Families in Memphis" → "Memphis"  |  "homeowners in the Dallas area" → "Dallas area"
   const extractLocation = (text: string): string | null => {
     const m = text.match(/\bin\s+(?:the\s+)?([A-Z][a-zA-Z\s\-]+?)(?:\s+(?:area|region|community|metro)|[,.]|$)/);
     return m ? m[1].trim() : null;
   };
   const location = extractLocation(audience);
 
-  // Detect the dominant theme across ALL listed services
+  // --- Service theme detection (only applies when org type isn't already specific) ---
   const getServiceTheme = (): string => {
+    // Org-type-level shortcuts that bypass keyword matching
+    if (isSaasType) return "saas";
+    if (isAgencyType) return "agency";
+    if (isNonprofitType) return "nonprofit";
+    if (isChurchType) return "church";
+    if (isRestaurantType) return "food";
+
     const t = allServicesText;
     if (/media.?box|tv.?box|set.?top|iptv|streaming.?box|kodi|firestick|roku|apple.?tv|entertainment.?box/.test(t)) return "home-entertainment";
     if (/wi.?fi|wifi|wireless|network|internet|router|hotspot/.test(t) && /setup|connect|install|config|support/.test(t)) return "tech-support";
@@ -502,8 +647,7 @@ function OutputView({
     if (/childcar|daycar|babysit|nanny|preschool|afterschool/.test(t)) return "childcare";
     if (/health|fitness|gym|nutrit|wellness|yoga|personal.?train|pilates/.test(t)) return "wellness";
     if (/legal|law|contract|attorney|notary|estate.?plan/.test(t)) return "legal";
-    if (/deliver|ship|transport|logistic|courier|dispatch/.test(t)) return "delivery";
-    if (/event|wedding|party|celebrat|decor|cater/.test(t)) return "events";
+    if (/event|wedding|party|celebrat|decor|cater/.test(t) && !isNonprofitType) return "events";
     if (/real.?estate|property|rent|lease|home.?buy|realtor/.test(t)) return "real-estate";
     if (/insur|protect|coverage|policy|claim/.test(t)) return "insurance";
     if (/setup|install|config|support|troubleshoot|tech/.test(t)) return "tech-support";
@@ -511,43 +655,162 @@ function OutputView({
   };
   const serviceTheme = getServiceTheme();
 
-  // Benefit headline phrase — theme-aware, no "[Service] Done Right"
+  // --- Benefit headline ---
   const getBenefitHeadline = (): string => {
     const loc = location ? ` in ${location}` : "";
     switch (serviceTheme) {
+      case "saas":          return cleanGoal ? `${cap(cleanGoal)}` : "Software That Solves the Real Problem";
+      case "agency":        return cleanGoal ? `${cap(cleanGoal)}` : "Strategy, Design, and Execution — Under One Roof";
+      case "nonprofit":     return cleanGoal ? `${cap(cleanGoal)}` : "Making a Lasting Difference in Our Community";
+      case "church":        return `A Place to Belong${loc ? `, ${loc}` : ""}`;
+      case "food":          return `Fresh Food Worth Coming Back For`;
       case "home-entertainment": return "Simple TV Box Setup & Home Entertainment Support";
-      case "tech-support":       return "Friendly Tech Help — Setup, Support & Troubleshooting";
-      case "lawn-care":          return location ? `Reliable Lawn Care in ${location}` : "A Yard You Can Be Proud Of";
-      case "cleaning":           return location ? `Professional Cleaning Services in ${location}` : "A Cleaner Space Without the Hassle";
-      case "plumbing":           return "Fast Plumbing Repairs When You Need Them";
-      case "electrical":         return "Safe, Professional Electrical Work You Can Trust";
-      case "digital-marketing":  return "Get Found Online and Bring in the Right Customers";
-      case "beauty":             return "Look and Feel Your Best — Every Single Visit";
-      case "accounting":         return "Financial Clarity So You Can Run Your Business With Confidence";
-      case "consulting":         return "Practical Guidance That Moves Your Business Forward";
-      case "photography":        return "Visuals That Tell Your Story the Right Way";
-      case "design":             return "Design That Represents You and Attracts the Right People";
-      case "tutoring":           return "Build Real Skills and Lasting Confidence";
-      case "moving":             return `A Smoother Move${loc} — Start to Finish`;
-      case "pest-control":       return "Get Rid of Pests and Keep Them Out for Good";
-      case "painting":           return "Fresh Paint, Clean Results — On Time and On Budget";
-      case "handyman":           return "Reliable Home Repairs Done Right the First Time";
-      case "childcare":          return "Safe, Caring Support for Your Child Every Day";
-      case "wellness":           return "Practical Health and Fitness Support That Fits Real Life";
-      case "legal":              return "Straightforward Legal Help When You Need It Most";
-      case "delivery":           return `Dependable Delivery${loc}, On Your Schedule`;
-      case "events":             return "Events That Run Smoothly and Feel Effortless";
-      case "real-estate":        return `Buy, Sell, or Rent${loc} With Confidence`;
-      case "insurance":          return "The Right Coverage, Explained in Plain Language";
-      default:                   return location ? `Dependable Service in ${location}` : "Quality Work You Can Count On";
+      case "tech-support":  return "Friendly Tech Help — Setup, Support & Troubleshooting";
+      case "lawn-care":     return location ? `Reliable Lawn Care in ${location}` : "A Yard You Can Be Proud Of";
+      case "cleaning":      return location ? `Professional Cleaning Services in ${location}` : "A Cleaner Space Without the Hassle";
+      case "plumbing":      return "Fast Plumbing Repairs When You Need Them";
+      case "electrical":    return "Safe, Professional Electrical Work You Can Trust";
+      case "digital-marketing": return "Get Found Online and Bring in the Right Customers";
+      case "beauty":        return "Look and Feel Your Best — Every Single Visit";
+      case "accounting":    return "Financial Clarity So You Can Run Your Business With Confidence";
+      case "consulting":    return "Practical Guidance That Moves Your Business Forward";
+      case "photography":   return "Visuals That Tell Your Story the Right Way";
+      case "design":        return "Design That Represents You and Attracts the Right People";
+      case "tutoring":      return "Build Real Skills and Lasting Confidence";
+      case "moving":        return `A Smoother Move${loc} — Start to Finish`;
+      case "pest-control":  return "Get Rid of Pests and Keep Them Out for Good";
+      case "painting":      return "Fresh Paint, Clean Results — On Time and On Budget";
+      case "handyman":      return "Reliable Home Repairs Done Right the First Time";
+      case "childcare":     return "Safe, Caring Support for Your Child Every Day";
+      case "wellness":      return "Practical Health and Fitness Support That Fits Real Life";
+      case "legal":         return "Straightforward Legal Help When You Need It Most";
+      case "events":        return "Events That Run Smoothly and Feel Effortless";
+      case "real-estate":   return `Buy, Sell, or Rent${loc} With Confidence`;
+      case "insurance":     return "The Right Coverage, Explained in Plain Language";
+      default:              return location ? `Dependable Service in ${location}` : "Quality Work You Can Count On";
     }
   };
 
-  // Describe a single service item specifically — matched to its name, not a generic fallback
+  // --- Describe a single service/feature/program uniquely ---
+  // Org-type-aware: each block handles the vocabulary for its category
   const describeService = (name: string): string => {
     const n = name.toLowerCase();
 
-    // Home entertainment / media box — ordered from most specific to least
+    // SaaS / App features
+    if (isSaasType) {
+      if (/dashboard|overview|home.?screen/.test(n)) return "A clear, real-time view of your key metrics and activity in one place.";
+      if (/analytic|report|insight|stat/.test(n)) return "Dig into usage patterns and trends so you can make decisions backed by data.";
+      if (/api|integration|webhook|connect/.test(n)) return "Connect to your existing tools and workflows without rebuilding from scratch.";
+      if (/auth|login|sign.?in|user.?account|sso/.test(n)) return "Secure, streamlined authentication that keeps accounts protected without friction.";
+      if (/team|collaborat|member|workspace/.test(n)) return "Invite teammates, assign roles, and work together without stepping on each other.";
+      if (/notif|alert|reminder/.test(n)) return "Stay in the loop with timely notifications — in-app, email, or push.";
+      if (/search|filter|sort/.test(n)) return "Find exactly what you need fast, with flexible search and filtering options.";
+      if (/export|download|import|csv/.test(n)) return "Move your data in and out easily — exports in standard formats on demand.";
+      if (/billing|subscript|payment|invoice|plan/.test(n)) return "Manage subscriptions, billing cycles, and invoices without leaving the platform.";
+      if (/onboard|setup|wizard|getting.?start/.test(n)) return "Guide new users through setup quickly so they hit value before day one ends.";
+      if (/mobile|ios|android|app/.test(n)) return "Access the full experience on any device — native iOS and Android apps included.";
+      if (/task.?manag|to.?do.?list|task.?track/.test(n)) return "Organize, assign, and track tasks in one place — so nothing falls through the cracks.";
+      if (/project.?manag|project.?track/.test(n)) return "Manage projects from kickoff to completion — with full visibility for everyone on the team.";
+      if (/time.?track|time.?log|timeshee/.test(n)) return "Log hours accurately and see exactly where time is going — for better billing and smarter planning.";
+      if (/schedul|calendar|appointment/.test(n)) return "Schedule meetings, manage availability, and coordinate time without the back-and-forth emails.";
+      if (/workflow.?automat|automat.?workflow/.test(n)) return "Build automated workflows that eliminate repetitive manual steps and keep work moving on its own.";
+      if (/automat|trigger/.test(n)) return "Automate repetitive tasks so your team can focus on work that actually matters.";
+      if (/ai|smart|ml|intelligence|predict/.test(n)) return "Intelligent features that learn from your data and surface what matters most.";
+      if (/support|help|ticket|chat|inbox/.test(n)) return "Built-in support tools so your team can respond to users without switching tabs.";
+      if (/permiss|role|access|admin/.test(n)) return "Granular permissions let you control exactly who sees and does what.";
+      return `A focused feature that handles ${name.toLowerCase()} cleanly, without added complexity.`;
+    }
+
+    // Agency / Consultancy services
+    if (isAgencyType) {
+      if (/brand|identity|logo/.test(n)) return "Build a visual identity that stands for something and is consistent everywhere it appears.";
+      if (/strateg|positioning|roadmap/.test(n)) return "Turn ambiguous goals into a clear, actionable plan your team can execute against.";
+      if (/web.?design|ui|ux|design/.test(n)) return "Interfaces that look sharp, feel intuitive, and serve the people using them.";
+      if (/web.?dev|develop|code|build/.test(n)) return "Custom-built digital products — scoped clearly, delivered on schedule.";
+      if (/seo|search.?optim/.test(n)) return "Sustainable organic search growth built on real content and technical precision.";
+      if (/paid.?ads|ppc|google.?ads|facebook.?ads/.test(n)) return "Ad campaigns that hit the right audience with the right message at the right time.";
+      if (/social.?media|content|copy/.test(n)) return "Consistent, on-brand content that builds an audience and earns engagement.";
+      if (/email|campaign|newsletter/.test(n)) return "Email that people actually open — segmented, personalized, and timed well.";
+      if (/analytic|data|report|measur/.test(n)) return "Clear reporting that shows what's working, what isn't, and what to do next.";
+      if (/consult|advise|audit|assess/.test(n)) return "An outside perspective that cuts through internal assumptions and finds real leverage.";
+      if (/photo|video|film|shoot/.test(n)) return "Professional visual production that gives your brand the quality it deserves.";
+      if (/pr|public.?relat|media/.test(n)) return "Strategic media coverage that shapes how your brand is perceived in the market.";
+      return `Professional ${name.toLowerCase()} services delivered with strategic clarity and measurable results.`;
+    }
+
+    // Nonprofit programs
+    if (isNonprofitType) {
+      if (/mentor|tutor|youth|teen|student|school/.test(n)) return "One-on-one and group support that gives young people the guidance they need to succeed.";
+      if (/job|employ|career|workforce|train|skill/.test(n)) return "Practical skills training and job placement support that leads to real, lasting employment.";
+      if (/hous|shelter|transitional|home/.test(n)) return "Safe, stable housing options and transition support for those working toward independence.";
+      if (/food|meal|pantry|hunger|feed/.test(n)) return "Nutritious meals and food assistance for community members facing food insecurity.";
+      if (/counsel|mental.?health|therapy|support.?group/.test(n)) return "Compassionate, accessible mental health support and peer programs for those in need.";
+      if (/health|medical|clinic|wellness/.test(n)) return "Community health services that remove barriers to care and support lasting wellbeing.";
+      if (/legal|advocate|right|justice/.test(n)) return "Free and low-cost legal advocacy to help people navigate systems that were not built for them.";
+      if (/senior|elder|aging/.test(n)) return "Supportive programs that help seniors live with dignity, connection, and independence.";
+      if (/child|family|parent/.test(n)) return "Family-centered programs that strengthen households and give children a better start.";
+      if (/educat|literacy|read|learn/.test(n)) return "Education programs that build foundational skills and open doors to future opportunity.";
+      if (/art|music|creat|cultur/.test(n)) return "Creative programs that nurture self-expression, cultural pride, and community identity.";
+      if (/volunteer|community|outreach/.test(n)) return "Hands-on community service that connects volunteers with real, meaningful work.";
+      return `A community program designed to ${name.toLowerCase()}, serving those who need it most.`;
+    }
+
+    // Church / Faith Organization
+    if (isChurchType) {
+      if (/worship|service|sunday|gather/.test(n)) return "A welcoming weekly gathering for worship, connection, and spiritual growth.";
+      if (/youth|teen|student|kids/.test(n)) return "Age-appropriate programs that help young people grow in faith and community.";
+      if (/small.?group|lifegroup|connect.?group|bible.?study/.test(n)) return "Smaller gatherings where members go deeper in faith and build real relationships.";
+      if (/mission|outreach|serve/.test(n)) return "Local and global service opportunities that put faith into action.";
+      if (/counsel|care|pastoral/.test(n)) return "Pastoral support and care for individuals and families walking through difficult seasons.";
+      if (/preschool|nursery|children/.test(n)) return "A safe, nurturing space for the youngest members of your church family.";
+      if (/women|men|ladies|gentlemen/.test(n)) return "Focused gatherings that build community and spiritual depth within your congregation.";
+      if (/give|tithe|donat/.test(n)) return "Simple, secure giving options that support the work of the church and community.";
+      if (/media|stream|podcast|sermon/.test(n)) return "Stay connected to messages and church content wherever you are, on any device.";
+      if (/food.?pantry|food.?bank|hunger.?relief|hunger.?ministr/.test(n)) return "A food ministry that provides groceries and essential items to families facing food insecurity — with dignity and no barriers.";
+      if (/communit.?meal|free.?meal|meal.?ministr|feeding/.test(n)) return "Regular community meals that bring people together around a table — nourishing bodies and building real connection.";
+      if (/benevolen/.test(n)) return "A ministry of practical care — providing financial assistance and essential resources to individuals and families facing hardship.";
+      if (/cloth|clothes.?closet|clothing.?ministr/.test(n)) return "Free clothing and essentials provided with dignity to individuals and families in the community.";
+      if (/outreach/.test(n)) return "Hands-on outreach that takes the love and resources of the church beyond the walls and into the community where people live.";
+      return `A ministry dedicated to ${name.toLowerCase()}, serving the congregation and surrounding community.`;
+    }
+
+    // Personal Brand / Coaching / Consulting
+    if (isPersonalBrand || serviceTheme === "consulting") {
+      if (/1.?on.?1|one.?on.?one|individual.?session|private.?session/.test(n)) return "Focused one-on-one sessions tailored entirely to where you are and where you want to go.";
+      if (/group.?coach|mastermind|cohort|group.?program/.test(n)) return "A high-energy group environment where you learn alongside peers who are serious about growth.";
+      if (/resume|cv/.test(n)) return "A professionally written resume that gets you noticed and opens the right doors.";
+      if (/linkedin/.test(n)) return "A fully optimized LinkedIn profile that builds your authority and attracts the opportunities you want.";
+      if (/interview.?prep|mock.?interview/.test(n)) return "Targeted coaching that builds your confidence and turns tough questions into clear, compelling answers.";
+      if (/executive.?coach|leadership.?coach/.test(n)) return "Strategic coaching for leaders who want to sharpen their decision-making, grow their impact, and lead with clarity.";
+      if (/career.?coach|career.?strateg|job.?search/.test(n)) return "A clear, personalized plan for your career move — from positioning to offers — built around your specific goals.";
+      if (/business.?coach|business.?strateg|entrepreneur/.test(n)) return "Practical business coaching that cuts through the noise and focuses on what actually moves the needle.";
+      if (/strateg|roadmap/.test(n)) return "A focused strategy session that turns big goals into a clear, prioritized action plan you can actually execute.";
+      if (/mentor|accountability/.test(n)) return "Consistent guidance and accountability to keep you moving forward — even when motivation runs low.";
+      if (/brand|personal.?brand/.test(n)) return "Build a personal brand that reflects who you really are and attracts the right clients, employers, or opportunities.";
+      if (/speak|presentation|pitch/.test(n)) return "Develop the skills to present your ideas with clarity, confidence, and real credibility.";
+      if (/workshop|training|course/.test(n)) return "Structured sessions that deliver real, actionable skills — not just theory.";
+      if (/vip.?day|intensive|deep.?dive/.test(n)) return "An immersive, results-focused session where we tackle your biggest challenges and leave with a clear path forward.";
+      if (/audit|review|assessment/.test(n)) return "A thorough review that surfaces what's working, what isn't, and exactly what to change next.";
+      if (/advisory|consult/.test(n)) return "Expert guidance on-demand — without the overhead of a full-time hire.";
+      return `Personalized ${name.toLowerCase()} support designed to get you real results, not just advice.`;
+    }
+
+    // Restaurant / Food
+    if (isMenuContext) {
+      if (/sandwich|sub|wrap/.test(n)) return "Fresh-made to order with quality ingredients — a go-to for a satisfying meal.";
+      if (/salad/.test(n)) return "Crisp and fresh, made with care — a lighter option without sacrificing flavor.";
+      if (/burger|smash/.test(n)) return "Juicy, built right, and worth every bite — a crowd favorite every time.";
+      if (/pizza/.test(n)) return "Hand-crafted with quality toppings on a perfectly baked crust.";
+      if (/taco|burrito|bowl/.test(n)) return "Bold, seasoned flavors in every bite — fresh ingredients, made to order.";
+      if (/dessert|cake|pie|cookie|sweet/.test(n)) return "A sweet finish made fresh — the kind of ending that keeps people coming back.";
+      if (/drink|beverage|cocktail|lemonade|tea/.test(n)) return "The perfect complement to your meal — refreshing, well-made, and consistent.";
+      if (/breakfast|brunch/.test(n)) return "A satisfying start made with fresh ingredients and genuine care.";
+      if (/bbq|smoked|brisket|ribs/.test(n)) return "Low and slow, the right way — smoky, tender, and full of real flavor.";
+      if (/seafood|fish|shrimp|crab/.test(n)) return "Fresh catch prepared well — clean flavors that honor the ingredient.";
+      return `Fresh, made-to-order ${name.toLowerCase()} — crafted with quality and served with care.`;
+    }
+
+    // Local service business and generic (non-food) paths below
     if (/media.?box.?sale|box.?sale|device.?sale|sell.?box/.test(n))
       return "Choose from available home entertainment streaming devices — setup guidance included.";
     if (/tv.?box.?setup|set.?up.?tv|box.?setup|setup.?box/.test(n))
@@ -567,12 +830,29 @@ function OutputView({
     if (/media.?box|tv.?box|set.?top|iptv|streaming.?device|entertainment.?box/.test(n))
       return "Professional setup and support for your home entertainment streaming device.";
 
+    // Plumbing — each item gets a distinct description
+    if (/emergency.?plumb|urgent.?plumb|burst.?pipe/.test(n)) return "Available around the clock for burst pipes, flooding, and plumbing emergencies.";
+    if (/pipe.?repair|pipe.?replac/.test(n)) return "Repair or replace damaged pipes cleanly and correctly — no repeat visits needed.";
+    if (/leak.?detect|leak.?find/.test(n)) return "Advanced leak detection that finds the source without tearing up your property.";
+    if (/drain.?clean|unclog|clog/.test(n)) return "Clear stubborn clogs and restore full flow without the mess or wait.";
+    if (/water.?heat|water.?heater|boiler/.test(n)) return "Install, repair, or replace water heaters so you never run out of hot water.";
+    if (/toilet|fixture|faucet/.test(n)) return "Toilet, faucet, and fixture repairs done right — no drips, no running, no callbacks.";
+    if (/sewer|septic|main.?line/.test(n)) return "Full sewer and septic service including inspection, cleaning, and repairs.";
+    if (/plumb|pipe|drain|leak/.test(n)) return "Reliable, licensed plumbing work completed on time and built to last.";
+
+    // Electrical
+    if (/panel|breaker|circuit/.test(n)) return "Safe panel upgrades and breaker work done to code — no shortcuts.";
+    if (/outlet|switch|wiring/.test(n)) return "New outlets and switches installed cleanly and up to current electrical code.";
+    if (/light|ceiling.?fan|fixture/.test(n)) return "Lighting and fan installation that improves comfort and reduces energy costs.";
+    if (/generator|backup.?power/.test(n)) return "Whole-home generator installation so you stay powered when the grid goes down.";
+    if (/electric|wiring/.test(n)) return "Licensed electrical work done to code — on time and backed by a warranty.";
+
     // Lawn & outdoor
     if (/lawn.?care|lawn.?service|lawn.?mainten/.test(n)) return "Consistent, scheduled care that keeps your lawn looking healthy all season.";
     if (/mow|grass.?cut|cut.?grass/.test(n)) return "Reliable mowing on a schedule so your lawn never gets away from you.";
     if (/landscap/.test(n)) return "Custom landscaping design and maintenance that adds real curb appeal.";
     if (/tree.?trim|tree.?remov|tree.?service/.test(n)) return "Safe, clean tree trimming and removal done by experienced hands.";
-    if (/mulch|sod|seed|aerat/.test(n)) return "Give your lawn what it needs to grow thick and stay green.";
+    if (/mulch|sod|seed|aerat/.test(n)) return "Seasonal treatments that give your lawn the foundation it needs to stay green.";
     if (/pressure.?wash|power.?wash/.test(n)) return "Blast away grime, mold, and buildup from driveways, decks, and siding.";
 
     // Cleaning
@@ -581,32 +861,13 @@ function OutputView({
     if (/recurring|regular|weekly|bi.?weekly|monthly.?clean/.test(n)) return "Scheduled cleaning so you never have to think about it — just come home to clean.";
     if (/clean|sanitiz|janitorial|housekeep|maid/.test(n)) return "Thorough, dependable cleaning you won't have to think twice about.";
 
-    // Plumbing
-    if (/leak.?repair|fix.?leak/.test(n)) return "Stop leaks fast before they turn into bigger, more expensive problems.";
-    if (/drain.?clean|unclog|clog/.test(n)) return "Clear clogs and keep your drains flowing without the mess or hassle.";
-    if (/water.?heat|boiler/.test(n)) return "Water heater installation and repair to keep hot water running reliably.";
-    if (/plumb|pipe|drain|leak|faucet|toilet|sewer/.test(n)) return "Fast, reliable repairs that get your plumbing back to normal.";
-
-    // Electrical
-    if (/panel|breaker|circuit/.test(n)) return "Safe panel upgrades and breaker work done to code.";
-    if (/outlet|switch|wiring/.test(n)) return "New outlets and switches installed cleanly and safely.";
-    if (/light|ceiling.?fan|fixture/.test(n)) return "Lighting and fan installation that improves comfort and saves energy.";
-    if (/electric|wiring|generator/.test(n)) return "Code-compliant electrical work done right by licensed professionals.";
-
-    // Tech support (general)
+    // Tech support
     if (/computer.?setup|laptop.?setup|pc.?setup/.test(n)) return "Get your computer configured, updated, and ready to use from day one.";
     if (/virus|malware|security.?scan/.test(n)) return "Scan, clean, and protect your device against threats and slowdowns.";
     if (/wi.?fi|wifi|router|network/.test(n)) return "Get your home or office network set up and connected reliably.";
     if (/phone.?setup|phone.?transfer|data.?transfer/.test(n)) return "Move your contacts, photos, and apps to a new phone without losing anything.";
     if (/printer|scanner/.test(n)) return "Get your printer or scanner connected and working — no more error messages.";
     if (/tech.?support|it.?support|computer.?help/.test(n)) return "Friendly, no-jargon help for everyday tech problems and questions.";
-
-    // Digital marketing / web
-    if (/seo/.test(n)) return "Improve your search rankings so the right people can find you online.";
-    if (/social.?media|instagram|facebook/.test(n)) return "Consistent, on-brand content that grows your following and drives engagement.";
-    if (/google.?ads|ppc|paid.?ads/.test(n)) return "Targeted ad campaigns that bring in leads without wasting your budget.";
-    if (/email.?market/.test(n)) return "Email campaigns that stay in touch with customers and bring them back.";
-    if (/website|web.?design|web.?dev/.test(n)) return "A professional website that represents your business and converts visitors.";
 
     // Beauty & wellness
     if (/haircut|hairstyle|color|highlight|balayage/.test(n)) return "Expert cuts and color in a relaxed, welcoming environment.";
@@ -615,30 +876,30 @@ function OutputView({
     if (/facial|skin|peel/.test(n)) return "Skin treatments tailored to your specific concerns and skin type.";
     if (/lash|brow|wax/.test(n)) return "Precise, clean shaping that frames your face perfectly.";
 
-    // Fitness & wellness
+    // Fitness
     if (/personal.?train|one.?on.?one.?train/.test(n)) return "Customized workouts with hands-on coaching to hit your specific goals.";
     if (/yoga|pilates/.test(n)) return "Structured classes that improve flexibility, strength, and mental clarity.";
     if (/nutrit|meal.?plan|diet/.test(n)) return "Practical nutrition guidance you can actually stick to in real life.";
 
-    // Accounting / finance
+    // Accounting
     if (/tax.?prep|tax.?return|file.?tax/.test(n)) return "Accurate tax filing that maximizes your return and keeps you compliant.";
     if (/bookkeep/.test(n)) return "Organized, up-to-date books so you always know where your money stands.";
     if (/payroll/.test(n)) return "Payroll handled on time, every time — no missed payments, no penalties.";
     if (/financ.?plan|budget|forecast/.test(n)) return "Clear financial planning so you can make confident business decisions.";
 
-    // Childcare & education
+    // Education / Childcare
     if (/tutoring|homework.?help|test.?prep/.test(n)) return "Patient, effective instruction that builds real understanding and confidence.";
     if (/daycar|childcar|babysit/.test(n)) return "Safe, attentive care your child will look forward to.";
     if (/after.?school/.test(n)) return "Supervised, structured care between school and home pickup.";
 
-    // Moving & logistics
+    // Moving
     if (/pack|unpack/.test(n)) return "Careful packing and unpacking so nothing gets lost or damaged.";
     if (/junk.?remov|haul.?away|trash/.test(n)) return "Fast haul-away of unwanted items — you point, we take it.";
     if (/storage/.test(n)) return "Secure short- or long-term storage while you're between spaces.";
     if (/mov/.test(n)) return "Efficient, careful moving that takes the stress out of the whole process.";
 
     // Home improvement
-    if (/paint.?interior|interior.?paint/.test(n)) return "Clean, even coats that transform a room without the mess or fumes.";
+    if (/paint.?interior|interior.?paint/.test(n)) return "Clean, even coats that transform a room without the mess.";
     if (/paint.?exterior|exterior.?paint/.test(n)) return "Weatherproof exterior painting that protects your home and improves curb appeal.";
     if (/drywall/.test(n)) return "Seamless drywall repair and installation with a smooth, paint-ready finish.";
     if (/flooring|hardwood|tile.?install/.test(n)) return "Durable flooring installed correctly so it looks great and lasts.";
@@ -650,11 +911,10 @@ function OutputView({
     if (/same.?day/.test(n)) return "Same-day delivery for time-sensitive orders and urgent pickups.";
     if (/deliver|ship|courier/.test(n)) return "Reliable pickup and delivery, tracked and on schedule.";
 
-    // Events
+    // Events (not nonprofit)
     if (/wedding/.test(n)) return "Full coordination and day-of support so you can enjoy every moment of your wedding.";
     if (/cater/.test(n)) return "Fresh, made-to-order food that feeds your guests and impresses every time.";
     if (/decor|floral|design/.test(n)) return "Custom event styling that turns any venue into the right atmosphere.";
-    if (/photo.?booth|entertai/.test(n)) return "Fun, memorable entertainment that keeps guests engaged all night.";
 
     // Real estate
     if (/buy|purchas/.test(n)) return "Guided support through the buying process so you make a confident, informed decision.";
@@ -666,40 +926,58 @@ function OutputView({
     if (/contract/.test(n)) return "Contracts reviewed and drafted clearly so you know exactly what you're agreeing to.";
     if (/estate.?plan|will|trust/.test(n)) return "Protect your assets and family's future with a clear, properly structured plan.";
 
-    // Generic fallback — still specific to the name
+    // Digital marketing
+    if (/seo/.test(n)) return "Improve your search rankings so the right people can find you online.";
+    if (/social.?media|instagram|facebook/.test(n)) return "Consistent, on-brand content that grows your following and drives engagement.";
+    if (/google.?ads|ppc|paid.?ads/.test(n)) return "Targeted ad campaigns that bring in leads without wasting your budget.";
+    if (/email.?market/.test(n)) return "Email campaigns that stay in touch with customers and bring them back.";
+    if (/website|web.?design|web.?dev/.test(n)) return "A professional website that represents your business and converts visitors.";
+
     return `Professional ${name.toLowerCase()} — handled with care and attention to detail.`;
   };
 
-  // --- Homepage sections by type ---
+  // --- Homepage section plan ---
   const getSections = (): string[] => {
     if (isMenuContext) return ["Hero", "Menu Highlights", "About", "Book or Order", "Contact"];
     switch (orgType) {
-      case "nonprofit": return ["Hero", "Our Mission", "Programs & Services", "Impact Stories", "Get Involved", "Contact"];
-      case "product shop": return ["Hero", "Featured Products", "Why Choose Us", "Testimonials", "Newsletter Signup", "Contact"];
-      case "personal brand": return ["Hero", "About Me", "Services", "Portfolio / Work", "Testimonials", "Contact"];
+      case "software/app startup":   return ["Hero", "Features", "How It Works", "Pricing", "Testimonials", "Contact / CTA"];
+      case "agency/consultancy":     return ["Hero", "Services", "Our Process", "Case Studies / Work", "Testimonials", "Contact"];
+      case "nonprofit":              return ["Hero", "Our Mission", "Programs & Services", "Impact Stories", "Get Involved", "Donate", "Contact"];
+      case "church/faith organization": return ["Hero", "Welcome", "Ministries & Programs", "Events", "About Us", "Give", "Contact"];
+      case "product shop":           return ["Hero", "Featured Products", "Why Choose Us", "Testimonials", "Newsletter Signup", "Contact"];
+      case "personal brand":         return ["Hero", "About Me", "Services", "Portfolio / Work", "Testimonials", "Contact"];
       case "local service business": return ["Hero", "Services", "Why Choose Us", "Service Area", "Customer Reviews", "Contact"];
-      case "community project": return ["Hero", "About the Project", "How to Get Involved", "Events", "Team", "Contact"];
-      default: return ["Hero", "About", "Services", "Testimonials", "Call to Action", "Contact"];
+      case "community project":      return ["Hero", "About the Project", "How to Get Involved", "Events", "Team", "Contact"];
+      default:                       return ["Hero", "About", "Services", "Testimonials", "Call to Action", "Contact"];
     }
   };
   const sectionsList = getSections();
 
-  // --- Hero headline: benefit-focused using detected service theme ---
-  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+  // --- Hero headline ---
   const getHeadline = (): string => {
     if (isMenuContext) {
-      // Use the first food item if available, otherwise generic
       return coreService
         ? `${bizName} — ${cap(coreService)} Worth Coming Back For`
         : `${bizName} — Fresh Food, Honest Flavor`;
     }
     switch (orgType) {
+      case "software/app startup":
+        return cleanGoal
+          ? `${bizName} — ${cap(cleanGoal)}`
+          : `${bizName} — Built for the Problem That Actually Matters`;
+      case "agency/consultancy":
+        return cleanGoal
+          ? `${bizName} — ${cap(cleanGoal)}`
+          : `${bizName} — Strategy and Execution, Without the Guesswork`;
       case "nonprofit":
         return cleanGoal
           ? `${bizName} — ${cap(cleanGoal)}`
           : `${bizName} — Making a Lasting Difference`;
+      case "church/faith organization":
+        return location
+          ? `${bizName} — A Place to Belong in ${location}`
+          : `${bizName} — A Place to Belong`;
       case "local service business":
-        // Always use theme-based benefit phrase — never "[Service] Done Right"
         return `${bizName} — ${getBenefitHeadline()}`;
       case "personal brand":
         return cleanGoal
@@ -724,27 +1002,68 @@ function OutputView({
     }
   };
 
-  // --- Hero subheadline: explains what they do, no raw audience paste ---
+  // --- Hero subheadline ---
   const getSubheadline = (): string => {
     if (isMenuContext) {
       return `Fresh, made-to-order food for events, gatherings, and everyday cravings. ${ctaUpper} today.`;
     }
-    // Build a natural "what we do" sentence from services + goal
+
+    if (isSaasType) {
+      const featurePhrase = servicesList.length >= 2
+        ? `${servicesList[0].toLowerCase()} and ${servicesList[1].toLowerCase()}`
+        : coreService ? coreService.toLowerCase() : "the tools your team actually needs";
+      return `${bizName} gives your team ${featurePhrase} — without the complexity you don't need. ${ctaUpper}.`;
+    }
+
+    if (isAgencyType) {
+      const servicePhrase = servicesList.length >= 2
+        ? `${servicesList[0].toLowerCase()} and ${servicesList[1].toLowerCase()}`
+        : coreService ? coreService.toLowerCase() : "full-service solutions";
+      const locationPhrase = location ? ` for clients in ${location}` : "";
+      return `We deliver ${servicePhrase}${locationPhrase} — grounded in strategy, built to perform. ${ctaUpper}.`;
+    }
+
+    if (isNonprofitType) {
+      const programPhrase = servicesList.length > 0 ? servicesList[0].toLowerCase() : "community programs";
+      const locationPhrase = location ? ` in ${location}` : "";
+      return `${bizName} provides ${programPhrase} and more${locationPhrase} — serving those who need it most. ${ctaUpper}.`;
+    }
+
+    if (isChurchType) {
+      const locationPhrase = location ? ` in ${location}` : "";
+      return `We are a growing faith community${locationPhrase} — welcoming everyone, at every stage of their journey. ${ctaUpper}.`;
+    }
+
+    if (isPersonalBrand) {
+      const servicePhrase = servicesList.length >= 2
+        ? `${servicesList[0].toLowerCase()} and ${servicesList[1].toLowerCase()}`
+        : coreService ? coreService.toLowerCase() : "coaching and strategy";
+      const locationPhrase = location ? ` in ${location}` : "";
+      const byTone: Record<string, string> = {
+        professional: `I help ${audienceDisplay} with ${servicePhrase}${locationPhrase} — grounded in strategy and built for real results. ${ctaUpper}.`,
+        bold: `I help ${audienceDisplay} ${cleanGoal || "get real results"}${locationPhrase} — no fluff, no excuses. ${ctaUpper}.`,
+        warm: `I help ${audienceDisplay} with ${servicePhrase}${locationPhrase} and I treat every client like a real person — not a number. ${ctaUpper} whenever you're ready.`,
+        playful: `I help ${audienceDisplay} with ${servicePhrase}${locationPhrase} — and I genuinely love doing it. ${ctaUpper}!`,
+        elegant: `I specialize in ${servicePhrase}${locationPhrase}, helping ${audienceDisplay} with care and precision. ${ctaUpper}.`,
+        "faith-based": `I help ${audienceDisplay} with ${servicePhrase}${locationPhrase} — guided by integrity and a heart for service. ${ctaUpper}.`,
+        "community-focused": `I help ${audienceDisplay} with ${servicePhrase}${locationPhrase} — built around the people I serve. ${ctaUpper}.`,
+      };
+      return byTone[toneDisplay] ?? `I help ${audienceDisplay} with ${servicePhrase}${locationPhrase}. ${ctaUpper} today.`;
+    }
+
     const offeringPhrase = servicesList.length >= 2
-      ? `${servicesList[0]} and ${servicesList[1].toLowerCase()}`
-      : coreService
-        ? coreService.toLowerCase()
-        : "quality service";
+      ? `${servicesList[0].toLowerCase()} and ${servicesList[1].toLowerCase()}`
+      : coreService ? coreService.toLowerCase() : "quality service";
     const locationPhrase = location ? ` in the ${location} area` : "";
 
     const byTone: Record<string, string> = {
       professional: `Providing ${offeringPhrase}${locationPhrase} with professionalism and reliability. ${ctaUpper} today.`,
-      bold: `${offeringPhrase.charAt(0).toUpperCase() + offeringPhrase.slice(1)}${locationPhrase} — done with no compromise. ${ctaUpper} now.`,
+      bold: `${cap(offeringPhrase)}${locationPhrase} — done with no compromise. ${ctaUpper} now.`,
       elegant: `Refined ${offeringPhrase}${locationPhrase}, delivered with care and precision. ${ctaUpper}.`,
       warm: `We specialize in ${offeringPhrase}${locationPhrase} and treat every client like a neighbor. ${ctaUpper} whenever you're ready.`,
       playful: `We do ${offeringPhrase}${locationPhrase} — and we actually love doing it. ${ctaUpper}!`,
       "faith-based": `Offering ${offeringPhrase}${locationPhrase} with integrity and a heart for service. ${ctaUpper}.`,
-      "community-focused": `${offeringPhrase.charAt(0).toUpperCase() + offeringPhrase.slice(1)}${locationPhrase}, built around the people we serve. ${ctaUpper}.`,
+      "community-focused": `${cap(offeringPhrase)}${locationPhrase}, built around the people we serve. ${ctaUpper}.`,
     };
     return byTone[toneDisplay] ?? `Professional ${offeringPhrase}${locationPhrase}. ${ctaUpper} today.`;
   };
@@ -752,43 +1071,64 @@ function OutputView({
   const headline = getHeadline();
   const subheadline = getSubheadline();
 
-  // --- About section: human tone, service-grounded, goal-specific ---
+  // --- About section ---
   const getAbout = (): string => {
     const offeringList = servicesList.length > 0
       ? servicesList.slice(0, 3).join(", ").toLowerCase()
       : "quality services";
     const goalSentence = cleanGoal ? ` We started ${bizName} with one goal in mind: ${cleanGoal}.` : "";
 
+    if (isSaasType) {
+      return `${bizName} is a software product designed to make ${offeringList} simpler and more effective.${goalSentence} We built it because we experienced the problem firsthand and knew there was a better way.`;
+    }
+    if (isAgencyType) {
+      return `${bizName} is a ${orgType} specializing in ${offeringList}.${goalSentence} We work with clients who want more than deliverables — they want outcomes, and a team that owns the work alongside them.`;
+    }
+    if (isNonprofitType) {
+      return `${bizName} is a nonprofit organization on a mission to ${cleanGoal || "serve our community"}. We offer ${offeringList} to the people who need it most, because we believe access to support should not depend on circumstance.`;
+    }
+    if (isChurchType) {
+      return `${bizName} is a faith community committed to welcoming people from all walks of life.${goalSentence} We gather each week to worship, grow, and serve — together. Whether you're new to faith or have been walking it for years, there is a place for you here.`;
+    }
+
+    if (isPersonalBrand) {
+      const byTone: Record<string, string> = {
+        professional: `I'm ${bizName} — a ${coreService ? coreService.toLowerCase() + " specialist" : "coach and consultant"} who helps ${audienceDisplay}. ${cleanGoal ? `My mission is simple: ${cleanGoal}.` : ""} I work with each client one-on-one to deliver real results, not just advice.`,
+        bold: `I'm ${bizName}. I help ${audienceDisplay} ${cleanGoal || "achieve results"} — no fluff, no filler, no excuses.`,
+        warm: `Hi, I'm ${bizName}. I started this work because I know firsthand how hard it can be to ${cleanGoal || "make real progress on your own"}. I help ${audienceDisplay} through ${offeringList} — and I treat every client like the individual they are.`,
+        playful: `Hey! I'm ${bizName}, and I love helping ${audienceDisplay}. I created ${offeringList} because I believe everyone deserves support that actually works.`,
+        elegant: `I'm ${bizName} — a specialist in ${offeringList}. My work is built on one principle: every client deserves a personalized approach, thoughtful guidance, and results they can see.`,
+        "faith-based": `I'm ${bizName}, and my work is grounded in a genuine desire to serve. I help ${audienceDisplay} with ${offeringList} — with honesty, care, and a heart for the people I work with.`,
+        "community-focused": `I'm ${bizName}, and I'm deeply invested in helping ${audienceDisplay}. I created ${offeringList} because I believe real change starts with real, personal support.`,
+      };
+      return byTone[toneDisplay] ?? `I'm ${bizName}, and I specialize in ${offeringList}. I'm here to help ${audienceDisplay} ${cleanGoal || "move forward with clarity and confidence"}.`;
+    }
+
     const byTone: Record<string, string> = {
-      professional:
-        `${bizName} is a ${orgType || "business"} specializing in ${offeringList}.${goalSentence} We take pride in doing the work right and standing behind everything we deliver.`,
-      bold:
-        `${bizName} is built on one standard: no shortcuts.${goalSentence} We offer ${offeringList} because we believe people deserve work that actually holds up.`,
-      elegant:
-        `${bizName} brings together ${offeringList} under one roof — with the kind of attention to detail that makes a real difference.${goalSentence}`,
-      warm:
-        `${bizName} was started because we saw a real need — and we knew we could help.${goalSentence} We specialize in ${offeringList} and treat every client the way we'd want to be treated ourselves.`,
-      playful:
-        `We're ${bizName}, and we genuinely love what we do.${goalSentence} Whether it's ${offeringList}, we show up ready and make sure you leave happy.`,
-      "faith-based":
-        `${bizName} was founded on faith and a calling to serve.${goalSentence} We provide ${offeringList} with honesty, compassion, and a commitment to doing what's right.`,
-      "community-focused":
-        `${bizName} is part of this community — not just a business in it.${goalSentence} We offer ${offeringList} because we believe local matters and people deserve reliable help close to home.`,
+      professional: `${bizName} is a ${orgType || "business"} specializing in ${offeringList}.${goalSentence} We take pride in doing the work right and standing behind everything we deliver.`,
+      bold: `${bizName} is built on one standard: no shortcuts.${goalSentence} We offer ${offeringList} because we believe people deserve work that actually holds up.`,
+      elegant: `${bizName} brings together ${offeringList} under one roof — with the kind of attention to detail that makes a real difference.${goalSentence}`,
+      warm: `${bizName} was started because we saw a real need — and we knew we could help.${goalSentence} We specialize in ${offeringList} and treat every client the way we'd want to be treated ourselves.`,
+      playful: `We're ${bizName}, and we genuinely love what we do.${goalSentence} Whether it's ${offeringList}, we show up ready and make sure you leave happy.`,
+      "faith-based": `${bizName} was founded on faith and a calling to serve.${goalSentence} We provide ${offeringList} with honesty, compassion, and a commitment to doing what's right.`,
+      "community-focused": `${bizName} is part of this community — not just a business in it.${goalSentence} We offer ${offeringList} because we believe local matters and people deserve reliable help close to home.`,
     };
     return byTone[toneDisplay] ?? `${bizName} provides ${offeringList} with a focus on quality and dependability.${goalSentence}`;
   };
 
-  // --- Services section: each item gets a one-line description ---
+  // --- Services/Features draft ---
   const getServicesDraft = (): string => {
     if (servicesList.length === 0) {
-      return "Add your services, programs, or products in the form above — they'll appear here.";
+      return "Add your services, programs, or features in the form above — they'll appear here with individual descriptions.";
     }
     if (isMenuContext) {
-      const intro = `Here's a look at what ${bizName} brings to the table:`;
-      return `${intro}\n\n${servicesList.map(s => `• ${s}`).join("\n")}`;
+      return `Here's a look at what ${bizName} brings to the table:\n\n${servicesList.map(s => `• ${s}`).join("\n")}`;
     }
     const introByType: Record<string, string> = {
+      "software/app startup": "Here's what's inside:",
+      "agency/consultancy": "We handle it end to end — here's how we can help:",
       nonprofit: "Our programs are designed to create lasting change:",
+      "church/faith organization": "Here's how we serve our congregation and community:",
       "personal brand": "Here's how I can help you:",
       "product shop": "Our products are built with you in mind:",
       "local service business": "We handle it all — here's what we do:",
@@ -804,6 +1144,28 @@ function OutputView({
   // --- CTA section ---
   const getCtaDraft = (): string => {
     const locationNote = location ? ` in ${location}` : "";
+
+    if (isSaasType) {
+      return cta === "start free trial"
+        ? `Try ${bizName} free for 14 days — no credit card required. See for yourself in minutes.`
+        : cta === "request a demo"
+        ? `Want to see ${bizName} in action? Schedule a live demo and we'll walk you through everything.`
+        : `Ready to get started? ${ctaUpper} and see what ${bizName} can do for your team.`;
+    }
+    if (isChurchType) {
+      return `We'd love to welcome you. Whether you're curious about faith or looking for a church home, come as you are — ${bizName} is a place for everyone.`;
+    }
+
+    if (isPersonalBrand) {
+      const byCtaKey: Record<string, string> = {
+        "book a call": `Ready to talk? Book a call and let's figure out exactly what you need — no pressure, no sales pitch.`,
+        "request a quote": `Every client is different. Tell me about your situation and I'll put together the right approach for you.`,
+        "contact us": `Have a question? I respond personally. Send me a message and let's connect.`,
+        "learn more": `Want to know more about how I work and who I help? Take a look around — I think you'll find it worth your time.`,
+      };
+      return byCtaKey[cta] ?? `I'd love to connect. ${ctaUpper} and let's talk about where you want to go and how I can help you get there.`;
+    }
+
     const byCtaKey: Record<string, string> = {
       "book a call": `Ready to talk? Schedule a call and we'll figure out exactly what you need — no pressure, no runaround.`,
       "book catering": `Planning an event${locationNote}? Let ${bizName} handle the food. Fill out a request and we'll take it from there.`,
@@ -813,20 +1175,162 @@ function OutputView({
       "contact us": `Have a question? We're easy to reach and happy to help. Send us a message and we'll get back to you promptly.`,
       "shop now": `Browse our full selection and find what you're looking for — straightforward, no-nonsense shopping.`,
       "learn more": `Want to know more about ${bizName} and what we do? Take a look around — we think you'll find it worth your time.`,
+      "get involved": `There are many ways to support ${bizName}${locationNote}. Volunteer, donate, or spread the word — every action helps.`,
     };
+    if (isNonprofitType) {
+      return byCtaKey[cta] ?? `Have questions about our programs? We're here to help. Reach out and let's connect.`;
+    }
     return byCtaKey[cta] ?? `${bizName} is ready to help. Reach out and let's get started.`;
   };
 
-  const contactDraft = [
-    email ? `Email: ${email}` : null,
-    phone ? `Phone: ${phone}` : null,
-  ].filter(Boolean).join("\n") || "Email: hello@example.com\nPhone: (555) 123-4567";
+  // --- Content checklist ---
+  const getContentChecklist = (): string => {
+    const universal = [
+      "□ Logo file (SVG or PNG with transparent background)",
+      "□ Brand colors (hex codes preferred)",
+      "□ Contact information (email, phone, address if applicable)",
+      "□ Social media profile links",
+    ];
 
-  // --- Replit Agent Prompt: structured and immediately usable ---
-  const promptDraft = `Build a clean, fully responsive multi-page website for the following client. Use only pure HTML5 and CSS3 — no JavaScript frameworks, no CSS frameworks, no external libraries except Google Fonts.
+    const byType: Record<string, string[]> = {
+      "software/app startup": [
+        "□ App screenshots or product demo video",
+        "□ Feature descriptions or product spec sheet",
+        "□ Pricing tiers and plan details",
+        "□ Customer testimonials or case study quotes",
+        "□ Founder or team headshots and bios",
+        "□ Integration logos or partner badges",
+        "□ Privacy policy and terms of service documents",
+      ],
+      "agency/consultancy": [
+        "□ Team headshots and short bios",
+        "□ 2–4 case studies or client work samples",
+        "□ Client logos (with permission to display)",
+        "□ Service descriptions or process overview",
+        "□ Testimonials or Google/Clutch review excerpts",
+        "□ Awards, certifications, or press mentions",
+      ],
+      "restaurant/food": [
+        "□ High-quality food photography (minimum 5–8 images)",
+        "□ Full menu with current pricing",
+        "□ Hours of operation and location/map details",
+        "□ Online ordering or reservation link (if applicable)",
+        "□ Staff or chef photos",
+        "□ Health department rating or certifications",
+      ],
+      "nonprofit": [
+        "□ Mission statement and organization story",
+        "□ Program descriptions and eligibility details",
+        "□ Impact statistics (people served, outcomes, etc.)",
+        "□ Team and board member headshots and bios",
+        "□ Testimonials from program participants",
+        "□ Donation page or preferred giving platform",
+        "□ 501(c)(3) information for tax deductibility",
+        "□ Annual report or financial transparency document (optional)",
+      ],
+      "church/faith organization": [
+        "□ Service times and location",
+        "□ Statement of faith or beliefs",
+        "□ Ministry and program descriptions",
+        "□ Pastor / leadership headshots and bios",
+        "□ Event calendar or upcoming series",
+        "□ Sermon archive or media library (if streaming)",
+        "□ Online giving platform link",
+        "□ Photos of congregation and community events",
+      ],
+      "personal brand": [
+        "□ Professional headshot (multiple options preferred)",
+        "□ Bio (short and long versions)",
+        "□ Portfolio pieces or work samples",
+        "□ Service or offer descriptions with pricing",
+        "□ Testimonials or client results",
+        "□ Speaking reel, press mentions, or media kit (if applicable)",
+      ],
+      "product shop": [
+        "□ Product photos (multiple angles, lifestyle shots)",
+        "□ Product descriptions and pricing",
+        "□ Shipping and return policy",
+        "□ Customer reviews or testimonials",
+        "□ About the maker / brand story",
+        "□ Size charts or specification sheets (if applicable)",
+      ],
+      "local service business": [
+        "□ Photos of your work (before/after, on-the-job)",
+        "□ Service area (cities, ZIP codes, or radius)",
+        "□ Licensing, bonding, or certification numbers",
+        "□ Customer reviews (Google, Yelp, or direct quotes)",
+        "□ Team photos (optional but builds trust)",
+        "□ Pricing guide or starting rates (if sharing publicly)",
+      ],
+      "community project": [
+        "□ Project description and background story",
+        "□ Team or organizer headshots and bios",
+        "□ Photos from events or past activities",
+        "□ Volunteer or participation sign-up form link",
+        "□ Partnership or sponsor logos",
+        "□ Impact updates or milestones",
+      ],
+    };
 
-## Client
-- Business Name: ${bizName}
+    const typeItems = byType[orgType] ?? [
+      "□ Photos relevant to your business or organization",
+      "□ Testimonials or reviews",
+      "□ Team headshots and bios",
+      "□ Pricing or service details",
+    ];
+
+    const shared = [
+      "□ Existing website URL or inspiration links",
+      "□ Written content you already have (About, services, etc.)",
+    ];
+
+    return "Before Build Begins — gather these assets before handing off to a developer or agent:\n\n" +
+      [...universal, ...typeItems, ...shared].join("\n");
+  };
+
+  // --- Tech stack label ---
+  const techStackLabels: Record<string, string> = {
+    "html-css": "Simple HTML / CSS",
+    "html-css-js": "HTML / CSS / JavaScript",
+    "react": "React",
+    "nextjs": "Next.js",
+    "replit-fullstack": "Replit Full-Stack App",
+  };
+  const techStackLabel = techStack ? techStackLabels[techStack] ?? techStack : "HTML / CSS (default)";
+
+  // --- Replit agent prompt ---
+  const getTechStackInstructions = (): string => {
+    switch (techStack) {
+      case "html-css":
+        return "Build using pure HTML5 and CSS3 only — no JavaScript frameworks, no CSS frameworks, no external libraries except Google Fonts.";
+      case "html-css-js":
+        return "Build using HTML5, CSS3, and vanilla JavaScript. No frameworks. Google Fonts are fine. Use JavaScript only for interactivity (mobile nav, smooth scroll, form validation).";
+      case "react":
+        return "Build as a React application using Vite. Use functional components and hooks. Style with CSS modules or Tailwind CSS. No Next.js.";
+      case "nextjs":
+        return "Build as a Next.js application using the App Router. Use TypeScript. Style with Tailwind CSS. Optimize for SEO with metadata and server components where appropriate.";
+      case "replit-fullstack":
+        return "Build as a Replit full-stack app. Use React on the frontend and Express.js on the backend. Include a contact form with server-side handling. Use TypeScript throughout.";
+      default:
+        return "Build using pure HTML5 and CSS3 — no JavaScript frameworks, no CSS frameworks, no external libraries except Google Fonts.";
+    }
+  };
+
+  // --- Cached generator outputs — each computed once, reused in template strings and output cards ---
+  const isClassicStack = techStack === "html-css" || techStack === "html-css-js" || !techStack;
+  const aboutDraft = getAbout();
+  const ctaDraft = getCtaDraft();
+  const techStackInstructions = getTechStackInstructions();
+  const servicesDraft = getServicesDraft();
+  const contentChecklist = getContentChecklist();
+
+  const promptDraft = `Build a clean, fully responsive ${isSaasType ? "marketing/landing page" : "multi-page website"} for the following ${isSaasType ? "software product" : isAgencyType ? "agency" : isNonprofitType ? "nonprofit organization" : isChurchType ? "church" : isPersonalBrand ? "personal brand" : "client"}.
+
+## Technology Stack
+${techStackInstructions}
+
+## ${isSaasType ? "Product" : isAgencyType ? "Agency" : isNonprofitType ? "Organization" : isChurchType ? "Church" : isPersonalBrand ? "Personal Brand" : "Client"}
+- Name: ${bizName}
 - Type: ${orgType || "local service business"}
 - Brand Tone: ${toneDisplay}
 - Primary Goal: ${goalDisplay}
@@ -835,14 +1339,14 @@ function OutputView({
 ## Pages
 ${navItems.map(p => `- ${p}`).join("\n")}
 
-## ${isMenuContext ? "Menu / Food Offerings" : "Services / Offerings"}
-${servicesList.length > 0 ? servicesList.map(s => `- ${s}`).join("\n") : "- [Add services or products here]"}
+## ${isMenuContext ? "Menu / Food Offerings" : isSaasType ? "Features / Modules" : isAgencyType ? "Services" : isNonprofitType ? "Programs" : isChurchType ? "Ministries & Programs" : isPersonalBrand ? "Offerings" : "Services / Offerings"}
+${servicesList.length > 0 ? servicesList.map(s => `- ${s}`).join("\n") : "- [Add services, features, or programs here]"}
 
 ## Copy to Use
 - Hero Headline: ${headline}
 - Hero Subheadline: ${subheadline}
 - CTA Button Label: ${ctaUpper}
-- About: ${getAbout()}
+- About: ${aboutDraft}
 
 ## Contact
 - Email: ${email || "hello@example.com"}
@@ -850,16 +1354,15 @@ ${servicesList.length > 0 ? servicesList.map(s => `- ${s}`).join("\n") : "- [Add
 
 ## Technical Requirements
 - Semantic HTML5: use header, nav, main, section, footer
-- Sticky navigation with a working hamburger menu for mobile (toggle with JavaScript)
-- Fully responsive using CSS Flexbox and Grid — no horizontal scroll on any screen size
-- CSS custom properties (variables) for all colors and fonts
-- Google Fonts selected to match the "${toneDisplay}" tone
-- All sections in one scrollable page: Hero, About, ${isMenuContext ? "Menu Highlights" : "Services"}, CTA, Footer/Contact
-- Smooth scroll behavior
-- Sections accessible via nav anchor links
+- Sticky navigation with a working hamburger menu for mobile
+- Fully responsive — no horizontal scroll on any screen size
+- ${isClassicStack ? "CSS custom properties (variables) for all colors and fonts" : "Tailwind CSS for styling"}
+- ${isClassicStack ? "Google Fonts selected to match the \"" + toneDisplay + "\" tone" : ""}
+- All primary sections on a single scrollable homepage: Hero, ${isMenuContext ? "Menu Highlights" : isSaasType ? "Features, How It Works, Pricing" : isNonprofitType ? "Mission, Programs, Get Involved" : "Services"}, CTA, Footer/Contact
+- Smooth scroll behavior and nav anchor links
 - Footer with contact info and copyright`;
 
-  // --- Tone-aware font selection ---
+  // --- Tone-aware font + color ---
   const fontByTone: Record<string, { query: string; family: string }> = {
     professional: { query: "Inter:wght@400;500;700", family: "'Inter', sans-serif" },
     bold: { query: "Oswald:wght@500;700&family=Open+Sans:wght@400;600", family: "'Oswald', sans-serif" },
@@ -871,7 +1374,6 @@ ${servicesList.length > 0 ? servicesList.map(s => `- ${s}`).join("\n") : "- [Add
   };
   const font = fontByTone[toneDisplay] ?? fontByTone.professional;
 
-  // --- Tone-aware color palette ---
   const colorByTone: Record<string, { primary: string; hover: string; bg: string; text: string; muted: string; darkBg: boolean }> = {
     professional: { primary: "#2563eb", hover: "#1d4ed8", bg: "#f8fafc", text: "#0f172a", muted: "#475569", darkBg: false },
     bold:         { primary: "#dc2626", hover: "#b91c1c", bg: "#0f172a", text: "#f8fafc", muted: "#94a3b8", darkBg: true },
@@ -922,24 +1424,24 @@ ${servicesList.length > 0 ? servicesList.map(s => `- ${s}`).join("\n") : "- [Add
         <section class="about" id="about">
             <div class="container">
                 <h2>About Us</h2>
-                <p>${getAbout()}</p>
+                <p>${aboutDraft}</p>
             </div>
         </section>
 
-        <section class="services" id="${isMenuContext ? "menu" : "services"}">
+        <section class="services" id="${isMenuContext ? "menu" : isSaasType ? "features" : "services"}">
             <div class="container">
                 <h2>${servicesSectionTitle}</h2>
                 <div class="service-grid">
                     ${servicesList.length > 0
                       ? servicesList.map(s => `<div class="service-card">\n                        <h3>${s}</h3>\n                        <p>${describeService(s)}</p>\n                    </div>`).join("\n                    ")
-                      : `<div class="service-card">\n                        <h3>[Service 1]</h3>\n                        <p>[Service description]</p>\n                    </div>\n                    <div class="service-card">\n                        <h3>[Service 2]</h3>\n                        <p>[Service description]</p>\n                    </div>`}
+                      : `<div class="service-card">\n                        <h3>[${isSaasType ? "Feature" : "Service"} 1]</h3>\n                        <p>[Description]</p>\n                    </div>\n                    <div class="service-card">\n                        <h3>[${isSaasType ? "Feature" : "Service"} 2]</h3>\n                        <p>[Description]</p>\n                    </div>`}
                 </div>
             </div>
         </section>
 
         <section class="cta-section" id="cta">
             <div class="container">
-                <h2>${getCtaDraft()}</h2>
+                <h2>${ctaDraft}</h2>
                 <a href="#contact" class="btn btn-light">${ctaUpper}</a>
             </div>
         </section>
@@ -964,7 +1466,7 @@ ${servicesList.length > 0 ? servicesList.map(s => `- ${s}`).join("\n") : "- [Add
 </body>
 </html>`;
 
-  // --- Starter CSS (tone-aware) ---
+  // --- Starter CSS ---
   const cssDraft = `:root {
     --primary: ${c.primary};
     --primary-hover: ${c.hover};
@@ -1119,7 +1621,7 @@ h2 {
     margin: 0 auto;
 }
 
-/* ── Services / Menu ── */
+/* ── Services / Features / Menu ── */
 
 .service-grid {
     display: grid;
@@ -1210,6 +1712,11 @@ footer a:hover { color: white; }
     .service-grid { grid-template-columns: 1fr; }
 }`;
 
+  const contactDraft = [
+    email ? `Email: ${email}` : null,
+    phone ? `Phone: ${phone}` : null,
+  ].filter(Boolean).join("\n") || "Email: hello@example.com\nPhone: (555) 123-4567";
+
   return (
     <div className="min-h-[100dvh] bg-background text-foreground py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-4xl mx-auto space-y-8">
@@ -1228,15 +1735,21 @@ footer a:hover { color: white; }
           <OutputCard title="1. Suggested Navigation" content={navString} onCopy={onCopy} />
           <OutputCard title="2. Homepage Section Plan" content={sectionsList.map((s, i) => `${i + 1}. ${s}`).join("\n")} onCopy={onCopy} />
           <OutputCard title="3. Hero Copy" content={`Headline: ${headline}\n\nSubheadline: ${subheadline}`} onCopy={onCopy} />
-          <OutputCard title="4. About Section Draft" content={getAbout()} onCopy={onCopy} />
-          <OutputCard title={`5. ${servicesSectionTitle} Draft`} content={getServicesDraft()} onCopy={onCopy} />
-          <OutputCard title="6. Call-to-Action Section" content={getCtaDraft()} onCopy={onCopy} />
-          <OutputCard title="7. Contact Section" content={contactDraft} onCopy={onCopy} className="md:col-span-2" />
+          <OutputCard title="4. About Section Draft" content={aboutDraft} onCopy={onCopy} />
+          <OutputCard title={`5. ${servicesSectionTitle} Draft`} content={servicesDraft} onCopy={onCopy} />
+          <OutputCard title="6. Call-to-Action Section" content={ctaDraft} onCopy={onCopy} />
+          <OutputCard title="7. Contact Section" content={contactDraft} onCopy={onCopy} />
+          <OutputCard
+            title={`8. Technology Stack`}
+            content={`Selected: ${techStackLabel}\n\nBuild instructions for your Replit agent:\n${techStackInstructions}`}
+            onCopy={onCopy}
+          />
+          <OutputCard title="9. Before Build Begins — Content Checklist" content={contentChecklist} onCopy={onCopy} className="md:col-span-2" />
         </div>
 
-        <CodeCard title="8. Copyable Replit Agent Prompt" code={promptDraft} onCopy={onCopy} />
-        <CodeCard title="9. Copyable Starter HTML" code={htmlDraft} onCopy={onCopy} language="html" />
-        <CodeCard title="10. Copyable Starter CSS" code={cssDraft} onCopy={onCopy} language="css" />
+        <CodeCard title="10. Copyable Replit Agent Prompt" code={promptDraft} onCopy={onCopy} />
+        <CodeCard title="11. Copyable Starter HTML" code={htmlDraft} onCopy={onCopy} language="html" />
+        <CodeCard title="12. Copyable Starter CSS" code={cssDraft} onCopy={onCopy} language="css" />
       </div>
     </div>
   );
