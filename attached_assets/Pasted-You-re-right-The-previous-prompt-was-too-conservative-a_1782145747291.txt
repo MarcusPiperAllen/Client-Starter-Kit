@@ -1,0 +1,166 @@
+You’re right. The previous prompt was too conservative and preserved things you’re now saying are not core to the product.
+
+The real product is:
+
+Mind Dump / Form Input → Intent Parsing → One Universal Agent Prompt
+
+Not “Replit prompt + HTML + CSS + cards + drafts.”
+
+So we should blend and rewrite. Not send the old one.
+
+Use this stronger direction:
+
+Refactor LaunchFrame toward its real core product: a Universal Agent Prompt Generator.
+
+Goal:
+The main output should be one excellent, copy-ready prompt that can be used in any coding agent environment: Claude Code, Replit Agent, Cursor, Gemini, ChatGPT, or another builder.
+
+Do not call the main output “Replit Agent Prompt” anymore.
+Rename it to:
+Universal Agent Build Prompt
+or
+Master Agent Build Prompt
+
+Product Direction:
+LaunchFrame should help users turn either structured form answers or a future messy mind-dump transcript into one strong starter prompt for building a website, app, or digital project.
+
+Important:
+Do not add AI yet.
+Do not add voice recording yet.
+Do not add transcript upload yet.
+Do not build a microphone feature.
+Do not add account/login/storage features.
+
+But refactor the app so those features are easier to add later.
+
+Core Concept:
+A “mind dump” means the user records or writes a messy long-form explanation of what they want to build. The future app should be able to parse that transcript into project intent fields.
+
+For now, the form remains the input method, but the internal structure should prepare for:
+
+Mind Dump Transcript
+→ ExtractedIntent
+→ User Review/Edit
+→ Universal Agent Build Prompt
+
+Requirements:
+
+1. Define an internal ExtractedIntent structure for the current project intent.
+
+It should include:
+
+* projectName
+* businessName
+* founderName
+* organizationType
+* primaryGoal
+* audience
+* services/features/programs as string[]
+* pages/screens as string[]
+* tone/style
+* callToAction
+* technologyStack
+* SEO requirements
+* contact email
+* contact phone
+* notes/context
+
+2. The form should read/write through ExtractedIntent.
+
+Keep the current form visible for now, but treat it as an editor for the intent object.
+
+3. Remove unnecessary draft complexity if it is not serving the real product.
+
+Review Save Draft / Restore Draft.
+
+If draft behavior creates unnecessary complexity or conflicts with the future flow, simplify or remove it.
+
+Keep autosave/privacy protection only if it clearly helps the user and does not create stale-data issues.
+
+4. Make the Universal Agent Build Prompt the primary product.
+
+The first and most important output after Generate should be one complete prompt.
+
+It should include:
+
+* project summary
+* target user/audience
+* goal
+* organization/business type
+* pages/screens needed
+* navigation
+* content sections
+* hero copy
+* about copy
+* services/features/programs
+* CTA
+* SEO instructions
+* accessibility requirements
+* responsive design requirements
+* suggested tech stack
+* styling/tone guidance
+* contact requirements
+* implementation instructions
+* testing instructions
+
+The prompt should not be tied only to Replit.
+Use language like:
+“Use this prompt in your preferred AI coding agent.”
+
+5. Demote secondary outputs.
+
+Keep useful supporting sections only if they help the user:
+
+* Content Checklist
+* SEO Starter Pack
+* Starter HTML/CSS if still useful
+* Individual copy cards only as secondary reference
+
+The main product is the Universal Agent Build Prompt.
+
+6. Remove or rename anything that makes the app feel Replit-only.
+
+Examples:
+
+* “Replit Agent Prompt” should become “Universal Agent Build Prompt”
+* Any instructions should mention Claude Code, Replit Agent, Cursor, Gemini, or other agents generally.
+
+7. Do not preserve code just because it exists.
+
+If a feature is not aligned with the product direction and adds complexity, recommend removing it.
+
+Do not leave unused code commented out.
+Delete dead code.
+
+8. Preserve important current behavior:
+
+* form validation
+* org-type routing
+* content intelligence
+* SEO awareness
+* privacy-safe autosave if still needed
+* current generation quality or better
+
+9. Run:
+
+* TypeScript check
+* build
+
+10. Report:
+
+* files changed
+* what was refactored
+* what was removed
+* what was renamed
+* how the new Universal Agent Build Prompt works
+* what still needs to happen before adding Mind Dump transcript support
+
+Do not commit yet.
+
+This is closer to your vision.
+
+Your correction is right: we should stop treating LaunchFrame like a “website plan report generator.”
+
+It is becoming a prompt-launch system:
+
+“Tell me what you want. I’ll mine the intent and give you the best possible starting prompt for your agent.”

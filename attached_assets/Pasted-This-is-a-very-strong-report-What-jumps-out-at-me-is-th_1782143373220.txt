@@ -1,0 +1,309 @@
+This is a very strong report.
+
+What jumps out at me is that the agent independently arrived at something you've been circling around for months:
+
+> LaunchFrame is not really a website planner.
+>
+> LaunchFrame is becoming an Intent Mining engine.
+
+That's the bigger product.
+
+---
+
+## What I think the report got right
+
+### 1. The schema recommendation is gold
+
+This part:
+
+```text
+ExtractedIntent
+{
+  projectName
+  businessName
+  organizationType
+  primaryGoal
+  audience
+  services
+  pages
+  tone
+  cta
+  technologyNeeds
+  seoNeeds
+  missingQuestions
+  rawDump
+}
+```
+
+This is the real architecture.
+
+Not:
+
+```text
+Form
+→ Generate
+```
+
+but:
+
+```text
+Mind Dump
+→ Intent Schema
+→ User Review
+→ Master Prompt
+→ Agent Build
+```
+
+That architecture can power:
+
+* LaunchFrame
+* App planning
+* Website planning
+* Internal tools
+* Business planning
+* Client intake
+
+with the same engine.
+
+---
+
+### 2. The agent discovered what I've been seeing
+
+This statement:
+
+> Output #11 is already the Master Build Prompt
+
+is important.
+
+Because you don't need:
+
+* 13 outputs
+* 25 outputs
+* 40 outputs
+
+You need:
+
+```text
+One excellent prompt.
+```
+
+Most experienced builders today are doing:
+
+```text
+Claude Code
+Build this application...
+```
+
+not:
+
+```text
+Give me:
+Hero
+About
+Services
+CTA
+HTML
+CSS
+Navigation
+SEO
+...
+```
+
+The AI can derive those.
+
+The user's real need is:
+
+```text
+Help me think.
+Help me articulate.
+Help me structure.
+```
+
+---
+
+### 3. The agent correctly identified over-collection
+
+When I look at the current form:
+
+```text
+Project Name
+Business Name
+Org Type
+Goal
+Audience
+Services
+Pages
+Tone
+CTA
+Notes
+...
+```
+
+I see friction.
+
+The user has to know all the answers.
+
+The future version assumes:
+
+```text
+User:
+"I want to build something that helps
+small business owners organize projects..."
+
+System:
+"Oh.
+Sounds like:
+- SaaS
+- Productivity
+- Audience = SMB owners
+- Goal = organization
+- Pages = Home Pricing Dashboard About
+- CTA = Start Free Trial"
+
+Confirm?
+```
+
+That's much closer to how people think.
+
+---
+
+## What I would do next
+
+Not AI.
+
+Not transcripts.
+
+Not voice.
+
+Not embeddings.
+
+Not RAG.
+
+Not OpenAI.
+
+Not Anthropic.
+
+None of that.
+
+---
+
+### Phase 3.5
+
+Build the Intent Schema first.
+
+I would tell the agent:
+
+```text
+Create an internal ExtractedIntent schema.
+
+Do not add AI.
+
+Do not add transcript support.
+
+Do not add voice.
+
+Refactor the application so that:
+
+Input
+→ populates ExtractedIntent
+
+Outputs
+→ consume ExtractedIntent
+
+The form should become a view/editor of ExtractedIntent.
+
+Goal:
+Prepare the architecture for future
+Mind Dump support without changing
+the current user experience.
+```
+
+Why?
+
+Because once that's done:
+
+```text
+Manual Form
+→ ExtractedIntent
+```
+
+later becomes:
+
+```text
+Mind Dump
+→ ExtractedIntent
+```
+
+without rebuilding the app.
+
+---
+
+## What I would NOT do
+
+I would NOT immediately build:
+
+```text
+Upload Transcript
+```
+
+yet.
+
+I would NOT immediately build:
+
+```text
+Voice Recording
+```
+
+yet.
+
+I would NOT immediately build:
+
+```text
+OpenAI extraction
+```
+
+yet.
+
+Because if the schema doesn't exist first:
+
+you'll build extraction,
+
+then redesign,
+
+then rebuild extraction.
+
+---
+
+## The thing I think you're actually building
+
+When I step back and look at:
+
+* ShowcaseFlow
+* LaunchFrame
+* Your field documentation ideas
+* Your ticket-writing ideas
+* Your business intake ideas
+
+I see the same pattern repeatedly:
+
+```text
+Human talks.
+
+AI extracts intent.
+
+AI structures information.
+
+Human reviews.
+
+AI produces action.
+```
+
+That's the recurring theme in almost every tool idea you've described.
+
+LaunchFrame might be the cleanest place to prove that concept first.
+
+So if it were me, I would not jump to voice or AI next.
+
+I would make the agent build the **ExtractedIntent architecture layer** first.
+
+That is the piece that turns LaunchFrame from a form generator into the foundation of an Intent Mining platform.

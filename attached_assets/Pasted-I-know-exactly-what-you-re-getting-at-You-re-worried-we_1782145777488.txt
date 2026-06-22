@@ -1,0 +1,82 @@
+I know exactly what you’re getting at.
+
+You’re worried we’re accidentally creating a prompt that says:
+
+“Don’t do AI.”
+
+“Don’t improve anything.”
+
+“Don’t think.”
+
+“Just refactor.”
+
+And that’s not how you work with agents.
+
+You generally want:
+
+“Stay aligned with the objective, but if you discover a better architecture that serves the objective, tell me about it.”
+
+The trick is not giving the agent unlimited freedom.
+
+If we say:
+
+Feel free to add AI.
+
+the agent may suddenly install OpenAI, Anthropic, embeddings, vector DBs, transcript processing, and 5 new dependencies.
+
+Now we’ve lost the plot.
+
+What I would add is something like:
+
+Agent Discretion Clause
+
+You are allowed to propose or implement limited AI-related architecture improvements if they directly support the long-term goal of LaunchFrame becoming an Intent Mining platform.
+
+However:
+
+* Do not add external AI providers.
+* Do not add OpenAI, Anthropic, Gemini, or other paid AI integrations.
+* Do not add transcript processing.
+* Do not add voice recording.
+* Do not add embeddings, vector databases, RAG, or agent orchestration frameworks.
+
+You may:
+
+* Improve internal architecture to prepare for future intent extraction.
+* Introduce abstraction layers that make future AI integration easier.
+* Improve naming, schema design, prompt-generation logic, or content-generation architecture.
+* Replace brittle rule-based systems with cleaner structures if they improve maintainability.
+
+If you discover an AI-related improvement that would materially improve the product but falls outside this scope:
+
+* Do not implement it.
+* Document it in the final report under:
+    “Future AI Opportunities.”
+
+The objective is not to add AI today.
+
+The objective is to make LaunchFrame more ready for future intent-mining capabilities while keeping the current product stable and functional.
+
+That’s the version I would add.
+
+Because then you’re telling the agent:
+
+Think.
+
+Use judgment.
+
+Improve architecture.
+
+Don’t start building ChatGPT inside LaunchFrame.
+
+And honestly, based on everything you’ve said tonight, I think the most important thing isn’t AI yet.
+
+It’s getting the architecture to:
+
+Input
+    ↓
+ExtractedIntent
+    ↓
+Universal Agent Build Prompt
+
+Once that pipeline exists, AI becomes a plug-in later rather than the foundation. That’s usually the cleaner path.
