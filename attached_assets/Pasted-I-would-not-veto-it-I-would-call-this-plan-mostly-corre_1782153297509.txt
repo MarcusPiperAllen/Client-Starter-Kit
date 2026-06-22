@@ -1,0 +1,113 @@
+I would not veto it.
+
+I would call this plan mostly correct, but I would tighten it before approving, because it has the right product direction but a few spots could create unnecessary complexity.
+
+Verdict: Blend / revise before sending to build.
+
+The strongest part is this:
+
+Brain dump → AI Intent Miner → ExtractedIntent → review/edit → Universal Agent Build Prompt
+
+That is exactly the product. The agent finally understands that the miner is the core, not just a better regex autofill.
+
+The part I like most is that it keeps the rule-based parser as a fallback. That is smart. If AI fails, the app still works.
+
+Where I would slow down:
+
+1. “Auto-build” may be too early
+
+I would keep Review First as the default.
+
+Auto-build is powerful, but risky. If AI misunderstands the project and jumps straight to the prompt, the user may trust bad output.
+
+Better wording:
+
+Add Auto-build as an optional secondary action, but the default flow should remain Review First.
+
+2. OpenAPI + generated client may be right, but confirm it matches the project
+
+The plan references:
+
+lib/api-spec/openapi.yaml
+orval.config.ts
+/api proxy
+typed client
+
+That sounds mature, but before approving, the agent should verify those files already exist and that this is the established project pattern. If not, it may overbuild.
+
+Add:
+
+Use the existing API/spec/client pattern only if it already exists. Do not introduce OpenAPI/orval just for this feature unless the project already uses it.
+
+3. Replit AI Integrations needs a verification step
+
+The plan assumes Replit AI Integrations are available and configured.
+
+Add:
+
+First verify the correct Replit AI integration package, environment, provider setup, and deployment requirements before writing route code.
+
+4. Stateless is correct
+
+This is excellent:
+
+no database, no chat history, no saved conversations
+
+Keep that. That prevents this from becoming a full AI platform too early.
+
+5. Missing/suggestions panel is essential
+
+This is not a side feature. This is part of the product.
+
+The miner should not just say:
+
+Filled 9 fields
+
+It should say:
+
+I found the audience, goal, features, and CTA.
+I could not find pricing, contact info, or preferred tech stack.
+Consider adding a Pricing page.
+
+That is what makes it feel like a thinking assistant.
+
+⸻
+
+My revised approval direction
+
+I would send this back to the agent:
+
+This plan is directionally approved, but revise before build with these constraints:
+1. Default flow should be Review First.
+Auto-build may exist as a secondary option, but the user should be encouraged to review AI-mined intent before generating.
+2. Verify the project’s existing API/spec/client pattern before implementing.
+If OpenAPI/orval/shared client already exists, use it.
+If not, do not introduce major API infrastructure without reporting back first.
+3. Verify Replit AI Integrations setup before coding.
+Confirm package, provider, server-side usage, deployment requirements, and whether any environment configuration is needed.
+4. Keep the AI miner stateless.
+No database, no chat history, no user accounts, no saved conversations.
+5. The AI output must conform to the existing ExtractedIntent shape.
+Do not create a second parallel model.
+6. The rule-based parser must remain as fallback and baseline.
+7. The miner must return:
+- extracted intent
+- fields filled
+- missing fields
+- suggestions/recommendations
+- whether AI or fallback parser was used
+8. Do not implement voice, file upload, transcript upload, embeddings, RAG, or user API keys.
+9. Before implementation, produce a revised technical plan showing:
+- exact files to change
+- exact route shape
+- expected request/response schema
+- AI provider setup
+- fallback behavior
+- UI states
+- testing plan
+
+That’s the move.
+
+Do not throw this plan away. It is finally aimed at the real product.
+
+But don’t let it start coding until it answers the infrastructure questions first.

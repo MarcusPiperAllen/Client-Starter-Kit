@@ -1,0 +1,135 @@
+I actually think you’re seeing the core issue correctly.
+
+The current app is becoming:
+
+Brain Dump
+    ↓
+Regex Parser
+    ↓
+Fill Form Fields
+    ↓
+Generate Prompt
+
+But that’s not the product you’ve been describing for weeks.
+
+The product you’ve been describing is:
+
+Brain Dump
+    ↓
+Intent Miner
+    ↓
+Extracted Intent
+    ↓
+Review / Correct
+    ↓
+Universal Agent Prompt
+
+Those are two very different products.
+
+Right now, the agent is getting pulled into:
+
+* Better form parsing
+* Better field extraction
+* Better list extraction
+* Better regex rules
+* Better autofill
+
+Those improvements are useful, but they are supporting systems.
+
+They’re not the moat.
+
+The moat is the miner.
+
+⸻
+
+When I listen to how you talk about this app, you don’t really care whether:
+
+* Features field got filled
+* Pages field got filled
+* Services field got filled
+
+Those are implementation details.
+
+What you care about is:
+
+“Can I dump my thoughts into this thing and have it help me think?”
+
+That’s the product.
+
+If Marcus dumps 20 minutes of rambling into the system, the user doesn’t actually want:
+
+Audience:
+...
+Services:
+...
+Pages:
+...
+
+The user wants:
+
+I understand what you're trying to build.
+Here's the project.
+Here's the business.
+Here's the audience.
+Here's what matters.
+Here's what's missing.
+Here's the build prompt.
+
+That requires reasoning.
+
+Not just extraction.
+
+⸻
+
+The reason I’ve been cautious about AI is because many projects jump straight to AI before they have structure.
+
+But now you’ve built:
+
+* ExtractedIntent
+* Universal Agent Prompt
+* Form architecture
+* Intent schema
+
+Those are exactly the foundations that make AI useful.
+
+Now AI has somewhere to put its answers.
+
+⸻
+
+If this were my product roadmap, I’d be telling the agent something like:
+
+Phase 4 should focus on Intent Mining, not additional form extraction.
+
+The goal is not to improve regex parsing of fields.
+
+The goal is to determine whether a reasoning engine can analyze a brain dump and populate an ExtractedIntent object more completely than rule-based extraction.
+
+Design an architecture where:
+
+Brain Dump → Intent Miner → ExtractedIntent → User Review → Universal Agent Prompt
+
+The miner may use AI if the implementation remains optional, modular, and does not lock the product to a specific provider.
+
+The objective is to evaluate whether reasoning-based extraction materially improves:
+
+* Audience detection
+* Goal detection
+* Feature identification
+* Page recommendations
+* Technology recommendations
+* Missing information discovery
+* Prompt quality
+
+Do not implement transcript upload, voice recording, accounts, or paid infrastructure in this phase.
+
+Focus on proving the Intent Miner concept.
+
+Because I think that’s the question you’re actually asking now:
+
+“Can LaunchFrame become an intelligent project-thinking assistant?”
+
+Not:
+
+“Can LaunchFrame get better at splitting comma-separated lists?”
+
+Those are very different futures. And based on everything you’ve said, the first one is the product you’re trying to build.
