@@ -34,6 +34,7 @@ interface ValidationErrors {
 
 const AUTOSAVE_KEY = "launchframe-autosave";
 const DRAFT_KEY = "launchframe-draft";
+const AUTOSAVE_TTL_MS = 8 * 60 * 60 * 1000;
 
 const emptyData: FormData = {
   projectName: "",
@@ -71,10 +72,30 @@ function writeStorage(key: string, data: FormData): boolean {
   }
 }
 
-function toSafeAutosave(data: FormData): Omit<FormData, "email" | "phone"> {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { email, phone, ...safe } = data;
-  return safe;
+function readAutosave(): FormData | null {
+  try {
+    const raw = localStorage.getItem(AUTOSAVE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed.savedAt === "number") {
+      if (Date.now() - parsed.savedAt > AUTOSAVE_TTL_MS) {
+        localStorage.removeItem(AUTOSAVE_KEY);
+        return null;
+      }
+      return parsed.data as FormData;
+    }
+    localStorage.removeItem(AUTOSAVE_KEY);
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function writeAutosave(data: FormData): void {
+  try {
+    const { email, phone, ...safe } = data; // eslint-disable-line @typescript-eslint/no-unused-vars
+    localStorage.setItem(AUTOSAVE_KEY, JSON.stringify({ data: safe, savedAt: Date.now() }));
+  } catch { /* ignore */ }
 }
 
 function hasDraft(): boolean {
@@ -99,7 +120,7 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 export default function Home() {
   const { toast } = useToast();
   const [formData, setFormData] = useState<FormData>(() => {
-    const saved = readStorage(AUTOSAVE_KEY);
+    const saved = readAutosave();
     if (!saved) return emptyData;
     return {
       ...emptyData,
@@ -116,6 +137,7 @@ export default function Home() {
   const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [draftExists, setDraftExists] = useState<boolean>(hasDraft);
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFirstRender = useRef(true);
 
@@ -127,7 +149,7 @@ export default function Home() {
     setAutoSaveStatus("saving");
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(() => {
-      writeStorage(AUTOSAVE_KEY, toSafeAutosave(formData) as FormData);
+      writeAutosave(formData);
       setAutoSaveStatus("saved");
       const clearTimer = setTimeout(() => setAutoSaveStatus("idle"), 2500);
       return () => clearTimeout(clearTimer);
@@ -167,6 +189,15 @@ export default function Home() {
     }
   };
 
+  const getDraftLabel = (): string => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) return "No draft saved";
+      const d = JSON.parse(raw) as Partial<FormData>;
+      return d.businessName ? `Draft: ${d.businessName}` : "Draft available";
+    } catch { return "Draft available"; }
+  };
+
   const handleRestoreDraft = () => {
     const draft = readStorage(DRAFT_KEY);
     if (draft) {
@@ -179,11 +210,14 @@ export default function Home() {
   };
 
   const handleNewProject = () => {
-    if (window.confirm("Clear all fields and start a new project? This cannot be undone.")) {
-      setFormData(emptyData);
-      setValidationErrors({});
-      try { localStorage.removeItem(AUTOSAVE_KEY); } catch { /* ignore */ }
-    }
+    setShowClearConfirm(true);
+  };
+
+  const handleNewProjectConfirmed = () => {
+    setFormData(emptyData);
+    setValidationErrors({});
+    setShowClearConfirm(false);
+    try { localStorage.removeItem(AUTOSAVE_KEY); } catch { /* ignore */ }
   };
 
   const handleGenerate = () => {
@@ -221,7 +255,12 @@ export default function Home() {
     return <OutputView formData={formData} onBack={handleBackToForm} onCopy={handleCopy} />;
   }
 
-  const hasErrors = Object.values(validationErrors).some(Boolean);
+  const hasErrors = !!(
+    validationErrors.businessName ||
+    validationErrors.orgType ||
+    validationErrors.goal ||
+    validationErrors.audience
+  );
 
   return (
     <div className="min-h-[100dvh] bg-background text-foreground py-12 px-4 sm:px-6 lg:px-8">
@@ -254,6 +293,22 @@ export default function Home() {
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
+            {showClearConfirm && (
+              <div className="rounded-lg border border-amber-500/50 bg-amber-50 dark:bg-amber-950/20 px-4 py-3">
+                <p className="text-sm font-medium text-amber-700 dark:text-amber-400 mb-3">
+                  Start a new project? Your current form data will be cleared.
+                </p>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="destructive" onClick={handleNewProjectConfirmed} data-testid="button-confirm-clear">
+                    Yes, clear the form
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setShowClearConfirm(false)} data-testid="button-cancel-clear">
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="projectName">Project Name</Label>
               <Input
@@ -568,7 +623,7 @@ export default function Home() {
                   )}
                 </div>
                 <span className="text-xs text-muted-foreground">
-                  {draftExists ? "Draft available" : "No draft saved"}
+                  {draftExists ? getDraftLabel() : "No draft saved"}
                 </span>
               </div>
 
@@ -1181,16 +1236,17 @@ function OutputView({
     }
 
     if (isPersonalBrand) {
+      const audLower = audienceDisplay.charAt(0).toLowerCase() + audienceDisplay.slice(1);
       const byTone: Record<string, string> = {
-        professional: `I'm ${founderDisplay} — a ${coreService ? fixProperNouns(coreService.toLowerCase()) + " specialist" : "coach and consultant"} who helps ${audienceDisplay}. ${cleanGoal ? `My mission is simple: ${cleanGoal}.` : ""} I work with each client one-on-one to deliver real results, not just advice.`,
-        bold: `I'm ${founderDisplay}. I help ${audienceDisplay} ${cleanGoal || "achieve results"} — no fluff, no filler, no excuses.`,
-        warm: `Hi, I'm ${founderDisplay}. I started this work because I know firsthand how hard it can be to ${cleanGoal || "make real progress on your own"}. I help ${audienceDisplay} through ${offeringList} — and I treat every client like the individual they are.`,
-        playful: `Hey! I'm ${founderDisplay}, and I love helping ${audienceDisplay}. I created ${offeringList} because I believe everyone deserves support that actually works.`,
+        professional: `I'm ${founderDisplay} — a ${coreService ? fixProperNouns(coreService.toLowerCase()) + " specialist" : "coach and consultant"} who helps ${audLower}. ${cleanGoal ? `My mission is simple: ${cleanGoal}.` : ""} I work with each client one-on-one to deliver real results, not just advice.`,
+        bold: `I'm ${founderDisplay}. I help ${audLower} ${cleanGoal || "achieve results"} — no fluff, no filler, no excuses.`,
+        warm: `Hi, I'm ${founderDisplay}. I started this work because I know firsthand how hard it can be to ${cleanGoal || "make real progress on your own"}. I help ${audLower} through ${offeringList} — and I treat every client like the individual they are.`,
+        playful: `Hey! I'm ${founderDisplay}, and I love helping ${audLower}. I created ${offeringList} because I believe everyone deserves support that actually works.`,
         elegant: `I'm ${founderDisplay} — a specialist in ${offeringList}. My work is built on one principle: every client deserves a personalized approach, thoughtful guidance, and results they can see.`,
-        "faith-based": `I'm ${founderDisplay}, and my work is grounded in a genuine desire to serve. I help ${audienceDisplay} with ${offeringList} — with honesty, care, and a heart for the people I work with.`,
-        "community-focused": `I'm ${founderDisplay}, and I'm deeply invested in helping ${audienceDisplay}. I created ${offeringList} because I believe real change starts with real, personal support.`,
+        "faith-based": `I'm ${founderDisplay}, and my work is grounded in a genuine desire to serve. I help ${audLower} with ${offeringList} — with honesty, care, and a heart for the people I work with.`,
+        "community-focused": `I'm ${founderDisplay}, and I'm deeply invested in helping ${audLower}. I created ${offeringList} because I believe real change starts with real, personal support.`,
       };
-      return byTone[toneDisplay] ?? `I'm ${founderDisplay}, and I specialize in ${offeringList}. I'm here to help ${audienceDisplay} ${cleanGoal || "move forward with clarity and confidence"}.`;
+      return byTone[toneDisplay] ?? `I'm ${founderDisplay}, and I specialize in ${offeringList}. I'm here to help ${audLower} ${cleanGoal || "move forward with clarity and confidence"}.`;
     }
 
     const byTone: Record<string, string> = {
@@ -1413,6 +1469,80 @@ function OutputView({
   const servicesDraft = getServicesDraft();
   const contentChecklist = getContentChecklist();
 
+  // --- HTML section ID for services/features/ministries/menu ---
+  const servicesSectionId = isMenuContext ? "menu" : isSaasType ? "features" : isChurchType ? "ministries" : "services";
+
+  // --- Extra nav items that need placeholder sections in the HTML ---
+  const generatedHtmlIds = new Set(["home", "about", servicesSectionId, "cta", "contact"]);
+  const extraSections = navItems.filter(item => {
+    const id = item.toLowerCase().replace(/\s+/g, "-");
+    return !generatedHtmlIds.has(id) && item !== "Home" && item !== "Contact";
+  });
+
+  // --- SEO title and meta description (reused in getSeoPack and htmlDraft head) ---
+  const seoTitle = (() => {
+    const goalPart = cleanGoal ? cap(cleanGoal.slice(0, 60)) : coreService ? cap(coreService) : "Quality Service";
+    return location ? `${bizName} | ${goalPart} — ${location}` : `${bizName} | ${goalPart}`;
+  })();
+  const seoMetaDesc = (() => {
+    const audLower = audienceDisplay.charAt(0).toLowerCase() + audienceDisplay.slice(1);
+    const verb = isSaasType ? "helps teams with" : isPersonalBrand ? "helps" : "provides";
+    const offering = coreService ? fixProperNouns(coreService.toLowerCase()) : cleanGoal ? cleanGoal : "quality services";
+    const ctaPhrase = cta ? ` ${cap(cta)} today.` : "";
+    let raw = `${bizName} ${verb} ${audLower} with ${offering}.${ctaPhrase}`;
+    if (raw.length > 155) raw = raw.slice(0, 152) + "...";
+    return raw;
+  })();
+
+  // --- SEO Starter Pack ---
+  const getSeoPack = (): string => {
+    const schemaType = isSaasType ? "SoftwareApplication"
+      : isPersonalBrand ? "Person"
+      : isChurchType ? "Organization"
+      : isNonprofitType ? "NGO"
+      : isRestaurantType ? "FoodEstablishment"
+      : "LocalBusiness";
+
+    const keywords = [
+      coreService ? fixProperNouns(coreService.toLowerCase()) : null,
+      servicesList[1] ? fixProperNouns(servicesList[1].toLowerCase()) : null,
+      location && coreService ? `${fixProperNouns(coreService.toLowerCase())} in ${location}` : null,
+      cleanGoal ? cleanGoal.split(" ").slice(0, 4).join(" ") : null,
+    ].filter(Boolean) as string[];
+
+    const emailOrUrl = email ? `"email": "${email}"` : `"url": "[Add website URL]"`;
+    const addressOrUrl = location
+      ? `"address": { "@type": "PostalAddress", "addressLocality": "${location}" }`
+      : `"url": "[Add website URL]"`;
+
+    return `Page Title Formula:
+${seoTitle}
+
+Meta Description (${seoMetaDesc.length} chars):
+${seoMetaDesc}
+
+Open Graph Tags:
+<meta property="og:title" content="${seoTitle}">
+<meta property="og:description" content="${seoMetaDesc}">
+<meta property="og:type" content="website">
+<meta property="og:image" content="[Add OG image URL — 1200×630px recommended]">
+
+JSON-LD Schema (${schemaType}):
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "${schemaType}",
+  "name": "${bizName}",
+  "description": "${seoMetaDesc.replace(/"/g, '\\"')}",
+  ${emailOrUrl},
+  ${addressOrUrl}
+}
+<\/script>
+
+Suggested Keywords (${keywords.length > 0 ? keywords.length : 2}):
+${keywords.length > 0 ? keywords.map((k, i) => `${i + 1}. ${k}`).join("\n") : "1. [Add target keyword]\n2. [Add target keyword]"}`;
+  };
+
   const promptDraft = `Build a clean, fully responsive ${isSaasType ? "marketing/landing page" : "multi-page website"} for the following ${isSaasType ? "software product" : isAgencyType ? "agency" : isNonprofitType ? "nonprofit organization" : isChurchType ? "church" : isPersonalBrand ? "personal brand" : "client"}.
 
 ## Technology Stack
@@ -1482,7 +1612,11 @@ ${servicesList.length > 0 ? servicesList.map(s => `- ${s}`).join("\n") : "- [Add
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${bizName}</title>
+    <title>${seoTitle}</title>
+    <meta name="description" content="${seoMetaDesc}">
+    <meta property="og:title" content="${seoTitle}">
+    <meta property="og:description" content="${seoMetaDesc}">
+    <meta property="og:type" content="website">
     <link rel="stylesheet" href="styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1512,12 +1646,12 @@ ${servicesList.length > 0 ? servicesList.map(s => `- ${s}`).join("\n") : "- [Add
 
         <section class="about" id="about">
             <div class="container">
-                <h2>About Us</h2>
+                <h2>${isPersonalBrand ? "About Me" : "About Us"}</h2>
                 <p>${aboutDraft}</p>
             </div>
         </section>
 
-        <section class="services" id="${isMenuContext ? "menu" : isSaasType ? "features" : "services"}">
+        <section class="services" id="${servicesSectionId}">
             <div class="container">
                 <h2>${servicesSectionTitle}</h2>
                 <div class="service-grid">
@@ -1528,6 +1662,13 @@ ${servicesList.length > 0 ? servicesList.map(s => `- ${s}`).join("\n") : "- [Add
             </div>
         </section>
 
+${extraSections.length > 0 ? extraSections.map(item => `
+        <section id="${item.toLowerCase().replace(/\s+/g, "-")}">
+            <div class="container">
+                <h2>${item}</h2>
+                <p>[Add ${item} content here]</p>
+            </div>
+        </section>`).join("") : ""}
         <section class="cta-section" id="cta">
             <div class="container">
                 <h2>${ctaDraft}</h2>
@@ -1834,11 +1975,12 @@ footer a:hover { color: white; }
             onCopy={onCopy}
           />
           <OutputCard title="9. Before Build Begins — Content Checklist" content={contentChecklist} onCopy={onCopy} className="md:col-span-2" />
+          <OutputCard title="10. SEO Starter Pack" content={getSeoPack()} onCopy={onCopy} className="md:col-span-2" />
         </div>
 
-        <CodeCard title="10. Copyable Replit Agent Prompt" code={promptDraft} onCopy={onCopy} />
-        <CodeCard title="11. Copyable Starter HTML" code={htmlDraft} onCopy={onCopy} language="html" />
-        <CodeCard title="12. Copyable Starter CSS" code={cssDraft} onCopy={onCopy} language="css" />
+        <CodeCard title="11. Copyable Replit Agent Prompt" code={promptDraft} onCopy={onCopy} />
+        <CodeCard title="12. Copyable Starter HTML" code={htmlDraft} onCopy={onCopy} language="html" />
+        <CodeCard title="13. Copyable Starter CSS" code={cssDraft} onCopy={onCopy} language="css" />
       </div>
     </div>
   );
