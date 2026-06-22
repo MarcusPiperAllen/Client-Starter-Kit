@@ -1,0 +1,61 @@
+Audit LaunchFrame for a future “Mind Dump → Intent Miner → Master Build Prompt” workflow.
+
+Do not change code.
+
+Definition:
+A “mind dump” means the user records or writes a messy long-form explanation of what they want to build. It may be repetitive, unclear, out of order, emotional, or incomplete.
+
+Example:
+“I want to build an app for small business owners… maybe coaches too… it should help them organize their website ideas… I don’t want them filling out a million fields… maybe they paste a transcript… the app should figure out the business type, goals, audience, services, pages, SEO, and then create one strong prompt for Claude Code or Replit Agent…”
+
+The future product should mine that messy input and extract structured intent.
+
+The system should identify:
+
+* Project/app name ideas
+* Business or organization name
+* Target audience
+* Primary goal
+* Business type
+* Services/features
+* Pages/screens needed
+* Tone/style
+* Technology needs
+* SEO needs
+* Missing questions
+* One master build prompt
+
+Tasks:
+
+1. Inspect the current LaunchFrame app.
+2. List every current intake field.
+3. For each field, classify:
+
+   * Must keep as manual input
+   * Could be inferred from a mind dump
+   * Should become optional
+   * Might be redundant
+4. Review current generated outputs.
+5. Identify which outputs should remain separate.
+6. Identify which outputs should be merged into one “Master Build Prompt.”
+7. Recommend how a future “Mind Dump” input section should work.
+8. Recommend what the app should do after the user pastes a transcript.
+9. Identify what data structure/schema the extracted intent should produce.
+10. Recommend the next 5 product improvements.
+
+Important:
+This is a planning audit only.
+Do not implement.
+Do not edit files.
+Do not add AI yet.
+Do not add transcript upload yet.
+
+Final report:
+
+* Current product summary
+* Field-by-field audit
+* Output audit
+* Mind dump workflow proposal
+* Suggested extracted-intent schema
+* Master Build Prompt structure
+* Fix now vs later roadmap
