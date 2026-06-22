@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { openai } from "@workspace/integrations-openai-ai-server";
+import { getOpenAI } from "@workspace/integrations-openai-ai-server";
 import {
   MineIntentBody,
   MineIntentResponse,
@@ -214,7 +214,7 @@ router.post("/intent/mine", async (req, res) => {
 
   let completion;
   try {
-    completion = await openai.chat.completions.create({
+    completion = await getOpenAI().chat.completions.create({
       model: "gpt-5.4",
       max_completion_tokens: 8192,
       messages: [

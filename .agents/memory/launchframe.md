@@ -1,23 +1,23 @@
 ---
 name: LaunchFrame Intent Miner
-description: How the AI Intent Miner and Universal Build Prompt fit together in LaunchFrame
+description: Durable design decisions behind the AI Intent Miner and Universal Build Prompt
 ---
 
 # LaunchFrame AI Intent Miner
 
-- **Stateless by design.** The miner has NO DB, transcripts, accounts, voice, or chat history. POST /api/intent/mine takes `{text}` and returns `{intent, projectKind, filledFields, missingFields, suggestions, source}`. Do not add persistence.
-  - **Why:** product decision — the tool is a one-shot brain-dump → prompt generator, not a session app.
+- **Stateless by design.** No DB, transcripts, accounts, voice, or chat history. The miner is a one-shot brain-dump → build-prompt generator. Do not add persistence "to remember" past runs; any refinement must pass prior intent from the client, not store it server-side.
+  - **Why:** product decision for this tool's scope.
 
-- **AI path + rule-based fallback live side by side.** Server returns `source:"ai"` only. The client (home.tsx `runMiner`) falls back to the local `parseBrainDump` + `summarizeIntent` on ANY mutation error and tags `source:"fallback"`. Keep `parseBrainDump` working — it is the offline baseline, not dead code.
+- **AI is best-effort; the rule-based parser is the guaranteed baseline.** The server only ever returns AI results, and the client falls back to its local parser on ANY failure (tagging the result as a fallback). Keep that parser working — it is the offline contract, not dead code.
+  - **How to apply:** never let an AI dependency become required for the brain-dump flow to function.
 
-- **FIELD_LABELS must stay mirrored in two places:** `artifacts/api-server/src/routes/intent.ts` and `artifacts/launchframe/src/lib/intent.ts` (full `Record<keyof ExtractedIntent,string>`, includes `notes`). If you add an ExtractedIntent field, update both or the AI and fallback panels report different fields.
+- **AI integration must never be required at boot.** Initialize the OpenAI client lazily (on first request), never at module import, so a missing/unprovisioned integration degrades to the fallback path instead of crashing the API server.
+  - **Why:** a prior review rejected an import-time throw that could take down the whole server when env vars were absent.
 
-- **Allowed select values are constrained in the server SYSTEM_PROMPT / normalizeIntent** to match the form's dropdowns (orgType, tone, callToAction, techStack). The AI is instructed to pick only from these sets. If the form options change, update the prompt constraints too.
+- **Field labels exist in two places (server route + client lib) and must stay mirrored.** If the set of intent fields changes, update both or the AI panel and the fallback panel will report different fields.
 
-- **Two brain-dump entry points:** "Review & fill form" (default — fills the intake form + shows analysis panel) and "Auto-build prompt" (secondary — mines then jumps straight to output). Auto-build builds output from the MERGED form (`formDataToIntent(merged)`), not the raw mined subset, so pre-existing manual entries survive.
+- **Allowed select values are constrained in the server prompt/normalizer to match the form's dropdowns.** If the form's options change, update the prompt constraints too, or the AI can emit values the form can't represent.
 
-- **`mineMeta` is a snapshot and goes stale.** It is cleared on any manual form edit (handleInputChange/handleSelectChange), New Project, and Restore Draft so stale suggestions/projectKind never leak into the build prompt. OutputView uses `mineMeta?.projectKind ?? deriveProjectKind(intent)`.
+- **The mined-result snapshot goes stale.** Clear it on any manual form edit, New Project, and Restore Draft so old suggestions/projectKind never leak into a freshly edited build prompt.
 
-- **One unified build prompt, kind-adaptive (T007).** `buildPrompt` in OutputView (home.tsx) always emits a self-contained prompt with a "Fill-the-Gaps Instructions" block (palette/typography/styling/responsive/a11y). When `projectKind==="software"` it also emits "Application Requirements" (features/screens/data model/auth/persistence) and a software verification line. Driven by the `projectKind` prop, not just orgType.
-
-- **OpenAI via Replit AI Integrations** (lib/integrations-openai-ai-server, trimmed to client-only, exports `{ openai }`). No user API key — billed to credits. Env: AI_INTEGRATIONS_OPENAI_BASE_URL + _API_KEY.
+- **One unified, kind-adaptive build prompt.** Always self-contained with gap-filling guidance (palette/type/styling/responsive/a11y); the software kind additionally specifies app requirements (features/data/auth) + verification. Driven by detected project kind, not just org type.
