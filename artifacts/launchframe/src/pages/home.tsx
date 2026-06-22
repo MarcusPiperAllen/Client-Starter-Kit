@@ -5,9 +5,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Copy, ArrowLeft, Loader2, Frame, Save, RotateCcw, CheckCircle2, AlertCircle, PlusCircle } from "lucide-react";
+import { Copy, ArrowLeft, Loader2, Frame, Save, RotateCcw, CheckCircle2, AlertCircle, PlusCircle, Sparkles, Wand2, ChevronDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { type FormData, type ExtractedIntent, splitList, formDataToIntent } from "@/lib/intent";
+import { type FormData, type ExtractedIntent, formDataToIntent, intentToFormData, parseBrainDump } from "@/lib/intent";
 
 interface ValidationErrors {
   businessName?: string;
@@ -123,6 +123,8 @@ export default function Home() {
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [intent, setIntent] = useState<ExtractedIntent | null>(null);
+  const [brainDump, setBrainDump] = useState("");
+  const [showBrainDump, setShowBrainDump] = useState(true);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFirstRender = useRef(true);
 
@@ -205,6 +207,30 @@ export default function Home() {
     try { localStorage.removeItem(AUTOSAVE_KEY); } catch { /* ignore */ }
   };
 
+  const handleBrainDumpFill = () => {
+    const text = brainDump.trim();
+    if (!text) {
+      toast({ title: "Nothing to parse", description: "Paste some notes first.", duration: 2000 });
+      return;
+    }
+    const parsed = intentToFormData(parseBrainDump(text));
+    const filledKeys = (Object.keys(parsed) as Array<keyof FormData>).filter((k) => parsed[k].trim() !== "");
+    setFormData((prev) => {
+      const next = { ...prev };
+      for (const k of filledKeys) next[k] = parsed[k];
+      return next;
+    });
+    setValidationErrors({});
+    const count = filledKeys.length;
+    toast({
+      title: count > 0 ? `Filled ${count} field${count === 1 ? "" : "s"}` : "No fields detected",
+      description: count > 0
+        ? "Review and edit the form below, then generate."
+        : "Try labels like 'Business:', 'Goal:', or 'Services:'.",
+      duration: 3000,
+    });
+  };
+
   const handleGenerate = () => {
     const errors = validate(formData);
     if (Object.keys(errors).length > 0) {
@@ -258,6 +284,52 @@ export default function Home() {
           <h1 className="text-4xl font-extrabold tracking-tight text-foreground">LaunchFrame</h1>
           <p className="mt-3 text-lg text-muted-foreground">Turn project details into a copy-ready build prompt for any AI coding agent.</p>
         </div>
+
+        <Card className="mb-6 border-primary/30 bg-primary/5">
+          <CardHeader className="pb-3">
+            <button
+              type="button"
+              onClick={() => setShowBrainDump((v) => !v)}
+              className="flex w-full items-start justify-between gap-4 text-left"
+              aria-expanded={showBrainDump}
+              data-testid="button-toggle-brain-dump"
+            >
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 inline-flex items-center justify-center p-2 bg-primary/10 rounded-lg shrink-0">
+                  <Sparkles className="w-4 h-4 text-primary" />
+                </div>
+                <div>
+                  <CardTitle className="text-base">Paste a brain dump</CardTitle>
+                  <CardDescription>Drop messy notes about your project and we'll auto-fill the form below.</CardDescription>
+                </div>
+              </div>
+              <ChevronDown className={`w-5 h-5 text-muted-foreground shrink-0 transition-transform ${showBrainDump ? "rotate-180" : ""}`} />
+            </button>
+          </CardHeader>
+          {showBrainDump && (
+            <CardContent className="space-y-3">
+              <Textarea
+                value={brainDump}
+                onChange={(e) => setBrainDump(e.target.value)}
+                placeholder={"e.g. Bright Smile Dental — local dentist in Austin.\nGoal: book more new patient appointments.\nAudience: families nearby.\nServices: cleanings, whitening, Invisalign.\nWarm and friendly tone. Book an appointment CTA.\nhi@brightsmile.com / 512-555-0199"}
+                className="resize-none min-h-[150px] font-mono text-sm bg-background"
+                data-testid="textarea-brain-dump"
+              />
+              <p className="text-xs text-muted-foreground">
+                Tip: lines like <span className="font-medium text-foreground/80">Business:</span>, <span className="font-medium text-foreground/80">Goal:</span>, or <span className="font-medium text-foreground/80">Services:</span> are detected automatically. Free-form notes work too.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Button className="flex-1" onClick={handleBrainDumpFill} data-testid="button-fill-from-notes">
+                  <Wand2 className="w-4 h-4 mr-2" />
+                  Auto-fill form
+                </Button>
+                <Button variant="outline" onClick={() => setBrainDump("")} disabled={!brainDump} data-testid="button-clear-brain-dump">
+                  Clear
+                </Button>
+              </div>
+            </CardContent>
+          )}
+        </Card>
 
         <Card className="shadow-lg border-border/50">
           <CardHeader>

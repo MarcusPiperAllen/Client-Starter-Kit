@@ -63,3 +63,193 @@ export function formDataToIntent(data: FormData): ExtractedIntent {
     notes: data.notes.trim(),
   };
 }
+
+// The inverse of formDataToIntent: lay a canonical intent back onto the
+// editable form surface. The mind-dump miner produces an ExtractedIntent, and
+// this maps it into FormData so the user can review and edit before generating.
+export function intentToFormData(intent: ExtractedIntent): FormData {
+  return {
+    projectName: intent.projectName,
+    businessName: intent.businessName,
+    founderName: intent.founderName,
+    orgType: intent.organizationType,
+    goal: intent.primaryGoal,
+    audience: intent.audience,
+    services: intent.services.join(", "),
+    pages: intent.pages.join(", "),
+    tone: intent.tone,
+    cta: intent.callToAction,
+    techStack: intent.technologyStack,
+    email: intent.contactEmail,
+    phone: intent.contactPhone,
+    notes: intent.notes,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Mind-dump miner: rule-based extraction of unstructured notes -> intent.
+// No paid AI provider required. Two complementary strategies:
+//   1. "Label: value" lines (Business:, Goal:, Services:, ...) are parsed
+//      directly into the matching field.
+//   2. Free-form text is mined for emails, phones, and keyword-matched select
+//      values (organization type, tone, CTA, tech stack); leftover prose is
+//      kept as notes / goal so nothing the user typed is lost.
+// ---------------------------------------------------------------------------
+
+const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// Returns the canonical select value whose keyword set first matches the text.
+const matchKeyword = (text: string, table: ReadonlyArray<readonly [string, readonly string[]]>): string => {
+  if (!text) return "";
+  for (const [value, keywords] of table) {
+    for (const kw of keywords) {
+      if (new RegExp(`\\b${escapeRegExp(kw)}\\b`, "i").test(text)) return value;
+    }
+  }
+  return "";
+};
+
+// Maps recognized line labels to form fields. Order is irrelevant (exact match).
+const LABEL_MAP: Record<string, keyof FormData> = {
+  "project": "projectName", "project name": "projectName",
+  "business": "businessName", "business name": "businessName",
+  "company": "businessName", "company name": "businessName",
+  "organization": "businessName", "organization name": "businessName",
+  "org name": "businessName", "brand": "businessName", "name": "businessName",
+  "founder": "founderName", "founder name": "founderName", "owner": "founderName",
+  "your name": "founderName", "my name": "founderName", "contact name": "founderName",
+  "type": "orgType", "org type": "orgType", "organization type": "orgType",
+  "business type": "orgType", "industry": "orgType", "category": "orgType",
+  "goal": "goal", "goals": "goal", "primary goal": "goal", "objective": "goal", "purpose": "goal",
+  "audience": "audience", "target audience": "audience", "target": "audience",
+  "customers": "audience", "target market": "audience", "clients": "audience",
+  "services": "services", "service": "services", "products": "services",
+  "offerings": "services", "features": "services", "programs": "services", "menu": "services",
+  "pages": "pages", "page": "pages", "sections": "pages",
+  "tone": "tone", "brand tone": "tone", "vibe": "tone", "style": "tone",
+  "cta": "cta", "call to action": "cta", "action": "cta",
+  "tech": "techStack", "tech stack": "techStack", "stack": "techStack",
+  "technology": "techStack", "technology stack": "techStack",
+  "build type": "techStack", "framework": "techStack",
+  "email": "email", "e-mail": "email", "contact email": "email",
+  "phone": "phone", "tel": "phone", "telephone": "phone",
+  "contact phone": "phone", "mobile": "phone",
+  "notes": "notes", "note": "notes", "other": "notes", "misc": "notes", "additional notes": "notes",
+};
+
+const ORG_TYPE_KEYWORDS = [
+  ["restaurant/food", ["restaurant", "cafe", "café", "coffee shop", "bakery", "diner", "bistro", "eatery", "catering", "food truck", "menu", "kitchen", "pizzeria", "brewery"]],
+  ["church/faith organization", ["church", "ministry", "ministries", "faith", "worship", "congregation", "parish", "gospel", "chapel"]],
+  ["nonprofit", ["nonprofit", "non-profit", "non profit", "charity", "ngo", "foundation"]],
+  ["software/app startup", ["software", "saas", "app startup", "mobile app", "web app", "startup", "application", "tech company"]],
+  ["agency/consultancy", ["agency", "consultancy", "consulting", "consultant", "studio", "marketing firm"]],
+  ["product shop", ["ecommerce", "e-commerce", "online store", "store", "boutique", "retail", "merch", "storefront", "shop"]],
+  ["personal brand", ["personal brand", "portfolio", "freelance", "freelancer", "coach", "influencer", "solopreneur"]],
+  ["community project", ["community project", "community group", "grassroots", "neighborhood association"]],
+  ["local service business", ["plumbing", "plumber", "hvac", "electrician", "landscaping", "lawn care", "cleaning", "contractor", "roofing", "salon", "barber", "spa", "repair", "handyman", "local service", "dentist", "dental", "clinic", "medical", "doctor", "chiropractor", "attorney", "lawyer", "law firm", "accountant", "accounting", "bookkeeping", "fitness", "gym", "auto repair", "mechanic", "photographer", "photography", "real estate", "realtor", "tutoring"]],
+] as const;
+
+const TONE_KEYWORDS = [
+  ["faith-based", ["faith", "faith-based", "christian", "biblical", "gospel", "scripture", "worship"]],
+  ["community-focused", ["community", "community-focused", "grassroots", "neighborly", "inclusive", "togetherness"]],
+  ["playful", ["playful", "fun", "quirky", "whimsical", "lighthearted", "casual", "cheeky"]],
+  ["bold", ["bold", "edgy", "daring", "confident", "punchy", "energetic", "strong"]],
+  ["elegant", ["elegant", "luxury", "luxurious", "sophisticated", "refined", "premium", "upscale", "classy", "high-end"]],
+  ["warm", ["warm", "friendly", "welcoming", "inviting", "approachable", "caring", "cozy", "compassionate"]],
+  ["professional", ["professional", "corporate", "formal", "trustworthy", "polished", "businesslike"]],
+] as const;
+
+const CTA_KEYWORDS = [
+  ["start free trial", ["free trial", "start trial", "sign up free", "try it free"]],
+  ["request a demo", ["demo", "request a demo", "book a demo", "schedule a demo"]],
+  ["book catering", ["book catering", "catering"]],
+  ["book a call", ["book a call", "schedule a call", "consultation", "discovery call", "book an appointment", "appointment", "book now", "schedule a visit"]],
+  ["request a quote", ["quote", "estimate", "get a quote"]],
+  ["view menu", ["view menu", "see menu", "our menu", "menu"]],
+  ["donate", ["donate", "donation", "give now", "support our cause"]],
+  ["shop now", ["shop now", "buy now", "purchase", "order now", "add to cart", "order online"]],
+  ["get involved", ["get involved", "volunteer", "join us", "become a member"]],
+  ["contact us", ["contact us", "get in touch", "reach out", "contact"]],
+  ["learn more", ["learn more", "find out more", "read more"]],
+] as const;
+
+const TECH_KEYWORDS = [
+  ["nextjs", ["next.js", "nextjs", "next js"]],
+  ["react", ["react", "react.js", "reactjs"]],
+  ["replit-fullstack", ["full-stack", "fullstack", "full stack", "database", "backend", "user accounts", "login", "authentication", "auth", "dashboard", "sign in", "user login"]],
+  ["html-css-js", ["javascript", "vanilla js", "interactive", "js"]],
+  ["html-css", ["html", "css", "static site", "static", "simple site", "landing page"]],
+] as const;
+
+export function parseBrainDump(text: string): ExtractedIntent {
+  const intent: ExtractedIntent = {
+    projectName: "", businessName: "", founderName: "", organizationType: "",
+    primaryGoal: "", audience: "", services: [], pages: [], tone: "",
+    callToAction: "", technologyStack: "", contactEmail: "", contactPhone: "", notes: "",
+  };
+
+  const raw: Partial<Record<keyof FormData, string>> = {};
+  let leftover: string[] = [];
+
+  for (const line of text.split(/\r?\n/)) {
+    const cleaned = line.replace(/^[\s\-*•·\u2013\u2014>]+/, "").trim();
+    if (!cleaned) continue;
+    const colon = cleaned.indexOf(":");
+    if (colon > 0 && colon <= 30) {
+      const label = cleaned.slice(0, colon).trim().toLowerCase();
+      const value = cleaned.slice(colon + 1).trim();
+      const field = LABEL_MAP[label];
+      if (field && value) {
+        raw[field] = raw[field] ? `${raw[field]}, ${value}` : value;
+        continue;
+      }
+    }
+    leftover.push(cleaned);
+  }
+
+  const splitItems = (v: string): string[] =>
+    v.split(/[,;\n]|\sand\s/i).map((s) => s.trim()).filter(Boolean);
+
+  intent.projectName = raw.projectName ?? "";
+  intent.businessName = raw.businessName ?? "";
+  intent.founderName = raw.founderName ?? "";
+  intent.primaryGoal = raw.goal ?? "";
+  intent.audience = raw.audience ?? "";
+  intent.services = raw.services ? splitItems(raw.services) : [];
+  intent.pages = raw.pages ? splitItems(raw.pages) : [];
+
+  intent.organizationType = matchKeyword(raw.orgType ?? "", ORG_TYPE_KEYWORDS) || matchKeyword(text, ORG_TYPE_KEYWORDS);
+  intent.tone = matchKeyword(raw.tone ?? "", TONE_KEYWORDS) || matchKeyword(text, TONE_KEYWORDS);
+  intent.callToAction = matchKeyword(raw.cta ?? "", CTA_KEYWORDS) || matchKeyword(text, CTA_KEYWORDS);
+  intent.technologyStack = matchKeyword(raw.techStack ?? "", TECH_KEYWORDS) || matchKeyword(text, TECH_KEYWORDS);
+
+  const emailRe = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i;
+  intent.contactEmail = (raw.email?.match(emailRe) ?? text.match(emailRe))?.[0] ?? "";
+
+  const phoneFrom = (s: string): string => (s.match(/[+(]?\d[\d\s().-]{7,}\d/)?.[0] ?? "").trim();
+  intent.contactPhone = raw.phone ? phoneFrom(raw.phone) : phoneFrom(text);
+
+  // Heuristics for free-form prose (no labels). A brain dump often opens with
+  // the business name, and a goal sentence usually contains an intent verb.
+  if (!intent.businessName && leftover.length > 0) {
+    const first = leftover[0];
+    if (first.split(/\s+/).length <= 5 && first.length <= 60 && !/[.!?]$/.test(first)) {
+      intent.businessName = first;
+      leftover = leftover.slice(1);
+    }
+  }
+  if (!intent.primaryGoal) {
+    const goalLine = leftover.find((l) => /\b(want|wants|goal|need|increase|drive|grow|generate|attract|get more|sell|help)\b/i.test(l));
+    if (goalLine) {
+      intent.primaryGoal = goalLine;
+      leftover = leftover.filter((l) => l !== goalLine);
+    }
+  }
+
+  const notesParts: string[] = [];
+  if (raw.notes) notesParts.push(raw.notes);
+  if (leftover.length) notesParts.push(leftover.join(" "));
+  intent.notes = notesParts.join(" ").trim();
+
+  return intent;
+}
