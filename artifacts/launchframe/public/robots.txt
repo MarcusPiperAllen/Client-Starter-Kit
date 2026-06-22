@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://client-starter-kit.replit.app/sitemap.xml
