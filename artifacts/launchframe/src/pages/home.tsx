@@ -25,6 +25,27 @@ interface FormData {
   notes: string;
 }
 
+// Canonical internal model. The form (FormData) is the editable surface; every
+// generated output is derived from this normalized structure. A future
+// mind-dump miner can produce an ExtractedIntent directly, drop it into the
+// form for user review/edit, and reuse the exact same output pipeline.
+interface ExtractedIntent {
+  projectName: string;
+  businessName: string;
+  founderName: string;
+  organizationType: string;
+  primaryGoal: string;
+  audience: string;
+  services: string[];
+  pages: string[];
+  tone: string;
+  callToAction: string;
+  technologyStack: string;
+  contactEmail: string;
+  contactPhone: string;
+  notes: string;
+}
+
 interface ValidationErrors {
   businessName?: string;
   orgType?: string;
@@ -117,6 +138,30 @@ function validate(data: FormData): ValidationErrors {
 
 const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 
+const splitList = (value: string): string[] =>
+  value ? value.split(",").map((item) => item.trim()).filter(Boolean) : [];
+
+// The seam between the editable form and the canonical model. The future
+// mind-dump miner will produce an ExtractedIntent here instead of the form.
+function formDataToIntent(data: FormData): ExtractedIntent {
+  return {
+    projectName: data.projectName.trim(),
+    businessName: data.businessName.trim(),
+    founderName: data.founderName.trim(),
+    organizationType: data.orgType,
+    primaryGoal: data.goal.trim(),
+    audience: data.audience.trim(),
+    services: splitList(data.services),
+    pages: splitList(data.pages),
+    tone: data.tone,
+    callToAction: data.cta,
+    technologyStack: data.techStack,
+    contactEmail: data.email.trim(),
+    contactPhone: data.phone.trim(),
+    notes: data.notes.trim(),
+  };
+}
+
 export default function Home() {
   const { toast } = useToast();
   const [formData, setFormData] = useState<FormData>(() => {
@@ -138,6 +183,7 @@ export default function Home() {
   const [draftExists, setDraftExists] = useState<boolean>(hasDraft);
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [intent, setIntent] = useState<ExtractedIntent | null>(null);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFirstRender = useRef(true);
 
@@ -231,6 +277,7 @@ export default function Home() {
     setIsGenerating(true);
     setTimeout(() => {
       setIsGenerating(false);
+      setIntent(formDataToIntent(formData));
       setIsOutputMode(true);
       try { localStorage.removeItem(AUTOSAVE_KEY); } catch { /* ignore */ }
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -251,8 +298,8 @@ export default function Home() {
     });
   };
 
-  if (isOutputMode) {
-    return <OutputView formData={formData} onBack={handleBackToForm} onCopy={handleCopy} />;
+  if (isOutputMode && intent) {
+    return <OutputView intent={intent} onBack={handleBackToForm} onCopy={handleCopy} />;
   }
 
   const hasErrors = !!(
@@ -270,7 +317,7 @@ export default function Home() {
             <Frame className="w-8 h-8 text-primary" />
           </div>
           <h1 className="text-4xl font-extrabold tracking-tight text-foreground">LaunchFrame</h1>
-          <p className="mt-3 text-lg text-muted-foreground">Website planning and content generator.</p>
+          <p className="mt-3 text-lg text-muted-foreground">Turn project details into a copy-ready build prompt for any AI coding agent.</p>
         </div>
 
         <Card className="shadow-lg border-border/50">
@@ -278,7 +325,7 @@ export default function Home() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <CardTitle>Project Intake</CardTitle>
-                <CardDescription>Fill out client details to generate a website plan.</CardDescription>
+                <CardDescription>Fill out the project details to generate your build prompt.</CardDescription>
               </div>
               <Button
                 variant="outline"
@@ -528,10 +575,10 @@ export default function Home() {
                   <SelectItem value="html-css-js">HTML / CSS / JavaScript</SelectItem>
                   <SelectItem value="react">React</SelectItem>
                   <SelectItem value="nextjs">Next.js</SelectItem>
-                  <SelectItem value="replit-fullstack">Replit Full-Stack App</SelectItem>
+                  <SelectItem value="replit-fullstack">Full-Stack Web App</SelectItem>
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">Guides the generated Replit agent prompt and starter code.</p>
+              <p className="text-xs text-muted-foreground">Guides the generated build prompt and starter code.</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -636,10 +683,10 @@ export default function Home() {
                 {isGenerating ? (
                   <>
                     <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                    Generating Plan...
+                    Generating Build Prompt...
                   </>
                 ) : (
-                  "Generate Website Plan"
+                  "Generate Build Prompt"
                 )}
               </Button>
             </div>
@@ -655,15 +702,28 @@ export default function Home() {
 // ---------------------------------------------------------------------------
 
 function OutputView({
-  formData,
+  intent,
   onBack,
   onCopy,
 }: {
-  formData: FormData;
+  intent: ExtractedIntent;
   onBack: () => void;
   onCopy: (text: string, title: string) => void;
 }) {
-  const { businessName, founderName, orgType, goal, audience, services, pages, tone, email, phone, cta, techStack } = formData;
+  const {
+    projectName,
+    businessName,
+    founderName,
+    organizationType: orgType,
+    primaryGoal: goal,
+    audience,
+    tone,
+    callToAction: cta,
+    technologyStack: techStack,
+    contactEmail: email,
+    contactPhone: phone,
+    notes,
+  } = intent;
 
   const bizName = businessName || "Your Business";
   const founderDisplay = founderName.trim() || bizName;
@@ -691,7 +751,7 @@ function OutputView({
   // --- Navigation ---
   const norm = (s: string) => s.toLowerCase().replace(/[\s\-_]+/g, "");
   const reservedNav = new Set(["home", "contact"]);
-  const rawPages = pages ? pages.split(",").map(p => p.trim()).filter(Boolean) : [];
+  const rawPages = intent.pages;
   const filteredPages = rawPages.filter(p => !reservedNav.has(norm(p)));
 
   const getDefaultNavItems = (): string[] => {
@@ -712,7 +772,8 @@ function OutputView({
   const navItems = filteredPages.length > 0 ? ["Home", ...filteredPages, "Contact"] : getDefaultNavItems();
   const navString = navItems.join(" • ");
 
-  const servicesList = services ? services.split(",").map(s => s.trim()).filter(Boolean) : [];
+  const servicesList = intent.services;
+  const servicesText = servicesList.join(", ");
 
   // --- Food/menu context: ONLY true for restaurant/food org type, or when org type is unspecified ---
   // This prevents food template bleed into SaaS, nonprofit, agency, etc.
@@ -736,7 +797,7 @@ function OutputView({
   };
 
   // Food context is TRUE only when org type is restaurant/food, or when no org type is set AND food keywords appear
-  const isMenuContext = isRestaurantType || (!orgType && (checkFood(services) || checkFood(goal) || checkFood(businessName)));
+  const isMenuContext = isRestaurantType || (!orgType && (checkFood(servicesText) || checkFood(goal) || checkFood(businessName)));
 
   // --- Section title ---
   const servicesSectionTitle =
@@ -1439,11 +1500,11 @@ function OutputView({
     "html-css-js": "HTML / CSS / JavaScript",
     "react": "React",
     "nextjs": "Next.js",
-    "replit-fullstack": "Replit Full-Stack App",
+    "replit-fullstack": "Full-Stack Web App",
   };
   const techStackLabel = techStack ? techStackLabels[techStack] ?? techStack : "HTML / CSS";
 
-  // --- Replit agent prompt ---
+  // --- Tech stack instructions ---
   const getTechStackInstructions = (): string => {
     switch (techStack) {
       case "html-css":
@@ -1455,7 +1516,7 @@ function OutputView({
       case "nextjs":
         return "Build as a Next.js application using the App Router. Use TypeScript. Style with Tailwind CSS. Optimize for SEO with metadata and server components where appropriate.";
       case "replit-fullstack":
-        return "Build as a Replit full-stack app. Use React on the frontend and Express.js on the backend. Include a contact form with server-side handling. Use TypeScript throughout.";
+        return "Build as a full-stack web app with React on the frontend and an Express.js (Node) backend. Include a contact form with server-side handling. Use TypeScript throughout.";
       default:
         return "Build using pure HTML5 and CSS3 — no JavaScript frameworks, no CSS frameworks, no external libraries except Google Fonts.";
     }
@@ -1494,21 +1555,25 @@ function OutputView({
     return raw;
   })();
 
+  // Derived once, shared by both the SEO Starter Pack and the build prompt.
+  const seoSchemaType = isSaasType ? "SoftwareApplication"
+    : isPersonalBrand ? "Person"
+    : isChurchType ? "Organization"
+    : isNonprofitType ? "NGO"
+    : isRestaurantType ? "FoodEstablishment"
+    : "LocalBusiness";
+
+  const seoKeywords = [
+    coreService ? fixProperNouns(coreService.toLowerCase()) : null,
+    servicesList[1] ? fixProperNouns(servicesList[1].toLowerCase()) : null,
+    location && coreService ? `${fixProperNouns(coreService.toLowerCase())} in ${location}` : null,
+    cleanGoal ? cleanGoal.split(" ").slice(0, 4).join(" ") : null,
+  ].filter(Boolean) as string[];
+
   // --- SEO Starter Pack ---
   const getSeoPack = (): string => {
-    const schemaType = isSaasType ? "SoftwareApplication"
-      : isPersonalBrand ? "Person"
-      : isChurchType ? "Organization"
-      : isNonprofitType ? "NGO"
-      : isRestaurantType ? "FoodEstablishment"
-      : "LocalBusiness";
-
-    const keywords = [
-      coreService ? fixProperNouns(coreService.toLowerCase()) : null,
-      servicesList[1] ? fixProperNouns(servicesList[1].toLowerCase()) : null,
-      location && coreService ? `${fixProperNouns(coreService.toLowerCase())} in ${location}` : null,
-      cleanGoal ? cleanGoal.split(" ").slice(0, 4).join(" ") : null,
-    ].filter(Boolean) as string[];
+    const schemaType = seoSchemaType;
+    const keywords = seoKeywords;
 
     const emailOrUrl = email ? `"email": "${email}"` : `"url": "[Add website URL]"`;
     const addressOrUrl = location
@@ -1543,44 +1608,6 @@ Suggested Keywords (${keywords.length > 0 ? keywords.length : 2}):
 ${keywords.length > 0 ? keywords.map((k, i) => `${i + 1}. ${k}`).join("\n") : "1. [Add target keyword]\n2. [Add target keyword]"}`;
   };
 
-  const promptDraft = `Build a clean, fully responsive ${isSaasType ? "marketing/landing page" : "multi-page website"} for the following ${isSaasType ? "software product" : isAgencyType ? "agency" : isNonprofitType ? "nonprofit organization" : isChurchType ? "church" : isPersonalBrand ? "personal brand" : "client"}.
-
-## Technology Stack
-${techStackInstructions}
-
-## ${isSaasType ? "Product" : isAgencyType ? "Agency" : isNonprofitType ? "Organization" : isChurchType ? "Church" : isPersonalBrand ? "Personal Brand" : "Client"}
-- Name: ${bizName}
-- Type: ${orgType || "local service business"}
-- Brand Tone: ${toneDisplay}
-- Primary Goal: ${goalDisplay}
-- Target Audience: ${audienceDisplay}
-
-## Pages
-${navItems.map(p => `- ${p}`).join("\n")}
-
-## ${isMenuContext ? "Menu / Food Offerings" : isSaasType ? "Features / Modules" : isAgencyType ? "Services" : isNonprofitType ? "Programs" : isChurchType ? "Ministries & Programs" : isPersonalBrand ? "Offerings" : "Services / Offerings"}
-${servicesList.length > 0 ? servicesList.map(s => `- ${s}`).join("\n") : "- [Add services, features, or programs here]"}
-
-## Copy to Use
-- Hero Headline: ${headline}
-- Hero Subheadline: ${subheadline}
-- CTA Button Label: ${ctaUpper}
-- About: ${aboutDraft}
-
-## Contact
-- Email: ${email || "[Add contact email]"}
-- Phone: ${phone || "[Add contact phone]"}
-
-## Technical Requirements
-- Semantic HTML5: use header, nav, main, section, footer
-- Sticky navigation with a working hamburger menu for mobile
-- Fully responsive — no horizontal scroll on any screen size
-- ${isClassicStack ? "CSS custom properties (variables) for all colors and fonts" : "Tailwind CSS for styling"}
-- ${isClassicStack ? "Google Fonts selected to match the \"" + toneDisplay + "\" tone" : ""}
-- All primary sections on a single scrollable homepage: Hero, ${isMenuContext ? "Menu Highlights" : isSaasType ? "Features, How It Works, Pricing" : isNonprofitType ? "Mission, Programs, Get Involved" : "Services"}, CTA, Footer/Contact
-- Smooth scroll behavior and nav anchor links
-- Footer with contact info and copyright`;
-
   // --- Tone-aware font + color ---
   const fontByTone: Record<string, { query: string; family: string }> = {
     professional: { query: "Inter:wght@400;500;700", family: "'Inter', sans-serif" },
@@ -1605,6 +1632,76 @@ ${servicesList.length > 0 ? servicesList.map(s => `- ${s}`).join("\n") : "- [Add
   const c = colorByTone[toneDisplay] ?? colorByTone.professional;
   const headerBg = c.darkBg ? "#1e293b" : "#ffffff";
   const navLinkColor = c.darkBg ? "#e2e8f0" : c.muted;
+
+  // --- Universal Agent Build Prompt (primary output) ---
+  // Agent-agnostic, self-contained, and derived entirely from ExtractedIntent.
+  const buildPrompt = `# Universal Agent Build Prompt
+
+Use this prompt in your preferred AI coding agent (Claude Code, Cursor, Replit Agent, Gemini, ChatGPT, or any other builder). It is self-contained — paste it in as-is.
+
+## Project Summary
+Build a modern, clean, fully responsive ${isSaasType ? "marketing/landing site" : "multi-page website"} for ${bizName}${projectName ? ` (project: ${projectName})` : ""}, a ${orgType || "local service business"}.${goalDisplay ? ` Primary goal: ${goalDisplay}.` : ""}
+
+## Target Audience
+${audienceDisplay}
+
+## Brand Type & Tone
+- Organization type: ${orgType || "local service business"}
+- Brand tone: ${toneDisplay}
+
+## Pages & Navigation
+Create these pages/sections with sticky navigation linking to each:
+${navItems.map((p) => `- ${p}`).join("\n")}
+
+## Homepage Section Order
+${sectionsList.map((s, i) => `${i + 1}. ${s}`).join("\n")}
+
+## ${servicesSectionTitle}
+${servicesList.length > 0 ? servicesList.map((s) => `- ${s}: ${describeService(s)}`).join("\n") : "- [Add services, features, or programs here]"}
+
+## Copy to Use
+- Hero headline: ${headline}
+- Hero subheadline: ${subheadline}
+- CTA button label: ${ctaUpper}
+
+About section:
+${aboutDraft}
+
+Call-to-action section:
+${ctaDraft}
+
+## Suggested Tech Stack
+${techStackInstructions}
+
+## Styling & Tone Guidance
+- Visual tone: ${toneDisplay}
+- Suggested font family: ${font.family}
+- Suggested colors: primary ${c.primary} (hover ${c.hover}), background ${c.bg}, text ${c.text}, muted ${c.muted}
+- Use generous spacing, clear visual hierarchy, and consistent styling across all sections.
+
+## SEO Instructions
+- Page title: ${seoTitle}
+- Meta description: ${seoMetaDesc}
+- Add Open Graph tags: og:title, og:description, og:type=website, and og:image (1200x630).
+- Add JSON-LD structured data using schema.org type "${seoSchemaType}" for ${bizName}.
+- Target keywords: ${seoKeywords.length > 0 ? seoKeywords.join(", ") : "[add 2-4 target keywords]"}
+
+## Accessibility & Responsive Requirements
+- Use semantic HTML5 landmarks: header, nav, main, section, footer.
+- Fully responsive with no horizontal scroll at any screen width.
+- Mobile navigation via an accessible hamburger toggle (aria-label, keyboard operable).
+- Meet WCAG AA color contrast, provide visible focus states, and add descriptive alt text on all images.
+- Respect prefers-reduced-motion for any animation or transition.
+
+## Contact Requirements
+- Email: ${email || "[Add contact email]"}
+- Phone: ${phone || "[Add contact phone]"}
+- Place contact details in the footer and link the primary CTA to the contact section.
+
+## Implementation & Testing
+- ${isClassicStack ? "Use CSS custom properties for all colors and fonts; load fonts via Google Fonts." : "Use a consistent component/styling system (e.g. Tailwind CSS)."}
+- Add smooth scrolling for in-page anchor links.
+- Before finishing, verify: mobile and desktop layouts render correctly, the mobile nav toggle works, all navigation links resolve, there are no console errors, and the page passes a basic accessibility check.${notes ? `\n\n## Additional Notes\n${notes}` : ""}`;
 
   // --- Starter HTML ---
   const htmlDraft = `<!DOCTYPE html>
@@ -1952,8 +2049,8 @@ footer a:hover { color: white; }
       <div className="max-w-4xl mx-auto space-y-8">
         <div className="flex items-center justify-between mb-8 pb-8 border-b border-border">
           <div>
-            <h1 className="text-3xl font-bold">Plan Generated</h1>
-            <p className="text-muted-foreground mt-1">Review, copy, and build.</p>
+            <h1 className="text-3xl font-bold">Your Build Prompt</h1>
+            <p className="text-muted-foreground mt-1">Copy the prompt below into any AI coding agent. Supporting reference is included beneath it.</p>
           </div>
           <Button variant="outline" onClick={onBack} data-testid="button-back">
             <ArrowLeft className="w-4 h-4 mr-2" />
@@ -1961,26 +2058,32 @@ footer a:hover { color: white; }
           </Button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <OutputCard title="1. Suggested Navigation" content={navString} onCopy={onCopy} />
-          <OutputCard title="2. Homepage Section Plan" content={sectionsList.map((s, i) => `${i + 1}. ${s}`).join("\n")} onCopy={onCopy} />
-          <OutputCard title="3. Hero Copy" content={`Headline: ${headline}\n\nSubheadline: ${subheadline}`} onCopy={onCopy} />
-          <OutputCard title="4. About Section Draft" content={aboutDraft} onCopy={onCopy} />
-          <OutputCard title={`5. ${servicesSectionTitle} Draft`} content={servicesDraft} onCopy={onCopy} />
-          <OutputCard title="6. Call-to-Action Section" content={ctaDraft} onCopy={onCopy} />
-          <OutputCard title="7. Contact Section" content={contactDraft} onCopy={onCopy} />
-          <OutputCard
-            title={`8. Technology Stack`}
-            content={`Selected: ${techStackLabel}\n\nBuild instructions for your Replit agent:\n${techStackInstructions}`}
-            onCopy={onCopy}
-          />
-          <OutputCard title="9. Before Build Begins — Content Checklist" content={contentChecklist} onCopy={onCopy} className="md:col-span-2" />
-          <OutputCard title="10. SEO Starter Pack" content={getSeoPack()} onCopy={onCopy} className="md:col-span-2" />
+        <CodeCard title="Universal Agent Build Prompt" code={buildPrompt} onCopy={onCopy} language="prompt" />
+
+        <div className="pt-4">
+          <h2 className="text-xl font-semibold">Supporting Reference</h2>
+          <p className="text-muted-foreground text-sm mt-1">Optional building blocks — the prompt above already contains everything needed to build.</p>
         </div>
 
-        <CodeCard title="11. Copyable Replit Agent Prompt" code={promptDraft} onCopy={onCopy} />
-        <CodeCard title="12. Copyable Starter HTML" code={htmlDraft} onCopy={onCopy} language="html" />
-        <CodeCard title="13. Copyable Starter CSS" code={cssDraft} onCopy={onCopy} language="css" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <OutputCard title="Suggested Navigation" content={navString} onCopy={onCopy} />
+          <OutputCard title="Homepage Section Plan" content={sectionsList.map((s, i) => `${i + 1}. ${s}`).join("\n")} onCopy={onCopy} />
+          <OutputCard title="Hero Copy" content={`Headline: ${headline}\n\nSubheadline: ${subheadline}`} onCopy={onCopy} />
+          <OutputCard title="About Section Draft" content={aboutDraft} onCopy={onCopy} />
+          <OutputCard title={`${servicesSectionTitle} Draft`} content={servicesDraft} onCopy={onCopy} />
+          <OutputCard title="Call-to-Action Section" content={ctaDraft} onCopy={onCopy} />
+          <OutputCard title="Contact Section" content={contactDraft} onCopy={onCopy} />
+          <OutputCard
+            title="Technology Stack"
+            content={`Selected: ${techStackLabel}\n\nBuild instructions for your AI coding agent:\n${techStackInstructions}`}
+            onCopy={onCopy}
+          />
+          <OutputCard title="Before Build Begins — Content Checklist" content={contentChecklist} onCopy={onCopy} className="md:col-span-2" />
+          <OutputCard title="SEO Starter Pack" content={getSeoPack()} onCopy={onCopy} className="md:col-span-2" />
+        </div>
+
+        <CodeCard title="Starter HTML" code={htmlDraft} onCopy={onCopy} language="html" />
+        <CodeCard title="Starter CSS" code={cssDraft} onCopy={onCopy} language="css" />
       </div>
     </div>
   );
