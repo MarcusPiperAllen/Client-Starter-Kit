@@ -5,12 +5,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Copy, ArrowLeft, Loader2, Frame, Save, RotateCcw, CheckCircle2, AlertCircle } from "lucide-react";
+import { Copy, ArrowLeft, Loader2, Frame, Save, RotateCcw, CheckCircle2, AlertCircle, PlusCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface FormData {
   projectName: string;
   businessName: string;
+  founderName: string;
   orgType: string;
   goal: string;
   audience: string;
@@ -37,6 +38,7 @@ const DRAFT_KEY = "launchframe-draft";
 const emptyData: FormData = {
   projectName: "",
   businessName: "",
+  founderName: "",
   orgType: "",
   goal: "",
   audience: "",
@@ -69,6 +71,12 @@ function writeStorage(key: string, data: FormData): boolean {
   }
 }
 
+function toSafeAutosave(data: FormData): Omit<FormData, "email" | "phone"> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { email, phone, ...safe } = data;
+  return safe;
+}
+
 function hasDraft(): boolean {
   try {
     return localStorage.getItem(DRAFT_KEY) !== null;
@@ -93,8 +101,15 @@ export default function Home() {
   const [formData, setFormData] = useState<FormData>(() => {
     const saved = readStorage(AUTOSAVE_KEY);
     if (!saved) return emptyData;
-    // Backfill techStack for saved data from before Phase 2
-    return { ...saved, techStack: saved.techStack ?? "" };
+    return {
+      ...emptyData,
+      ...saved,
+      techStack: saved.techStack ?? "",
+      founderName: saved.founderName ?? "",
+      // email/phone excluded from autosave — always start blank
+      email: "",
+      phone: "",
+    };
   });
   const [isGenerating, setIsGenerating] = useState(false);
   const [isOutputMode, setIsOutputMode] = useState(false);
@@ -112,7 +127,7 @@ export default function Home() {
     setAutoSaveStatus("saving");
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(() => {
-      writeStorage(AUTOSAVE_KEY, formData);
+      writeStorage(AUTOSAVE_KEY, toSafeAutosave(formData) as FormData);
       setAutoSaveStatus("saved");
       const clearTimer = setTimeout(() => setAutoSaveStatus("idle"), 2500);
       return () => clearTimeout(clearTimer);
@@ -132,7 +147,11 @@ export default function Home() {
   };
 
   const handleSelectChange = (name: keyof FormData) => (value: string) => {
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    if (name === "orgType" && value !== formData.orgType) {
+      setFormData((prev) => ({ ...prev, orgType: value, services: "" }));
+    } else {
+      setFormData((prev) => ({ ...prev, [name]: value }));
+    }
     if (name in validationErrors) {
       setValidationErrors((prev) => ({ ...prev, [name]: undefined }));
     }
@@ -151,7 +170,7 @@ export default function Home() {
   const handleRestoreDraft = () => {
     const draft = readStorage(DRAFT_KEY);
     if (draft) {
-      setFormData({ ...draft, techStack: draft.techStack ?? "" });
+      setFormData({ ...emptyData, ...draft, techStack: draft.techStack ?? "", founderName: draft.founderName ?? "" });
       setValidationErrors({});
       toast({ title: "Draft restored", description: "Your saved draft has been loaded.", duration: 2000 });
     } else {
@@ -159,11 +178,18 @@ export default function Home() {
     }
   };
 
+  const handleNewProject = () => {
+    if (window.confirm("Clear all fields and start a new project? This cannot be undone.")) {
+      setFormData(emptyData);
+      setValidationErrors({});
+      try { localStorage.removeItem(AUTOSAVE_KEY); } catch { /* ignore */ }
+    }
+  };
+
   const handleGenerate = () => {
     const errors = validate(formData);
     if (Object.keys(errors).length > 0) {
       setValidationErrors(errors);
-      // Scroll to first error
       const firstErrorField = Object.keys(errors)[0];
       document.getElementById(firstErrorField)?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
@@ -172,6 +198,7 @@ export default function Home() {
     setTimeout(() => {
       setIsGenerating(false);
       setIsOutputMode(true);
+      try { localStorage.removeItem(AUTOSAVE_KEY); } catch { /* ignore */ }
       window.scrollTo({ top: 0, behavior: "smooth" });
     }, 600);
   };
@@ -194,7 +221,7 @@ export default function Home() {
     return <OutputView formData={formData} onBack={handleBackToForm} onCopy={handleCopy} />;
   }
 
-  const hasErrors = Object.keys(validationErrors).length > 0;
+  const hasErrors = Object.values(validationErrors).some(Boolean);
 
   return (
     <div className="min-h-[100dvh] bg-background text-foreground py-12 px-4 sm:px-6 lg:px-8">
@@ -204,13 +231,27 @@ export default function Home() {
             <Frame className="w-8 h-8 text-primary" />
           </div>
           <h1 className="text-4xl font-extrabold tracking-tight text-foreground">LaunchFrame</h1>
-          <p className="mt-3 text-lg text-muted-foreground">Internal website planning tool.</p>
+          <p className="mt-3 text-lg text-muted-foreground">Website planning and content generator.</p>
         </div>
 
         <Card className="shadow-lg border-border/50">
           <CardHeader>
-            <CardTitle>Project Intake</CardTitle>
-            <CardDescription>Fill out client details to generate a website plan.</CardDescription>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <CardTitle>Project Intake</CardTitle>
+                <CardDescription>Fill out client details to generate a website plan.</CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleNewProject}
+                className="shrink-0 text-muted-foreground"
+                data-testid="button-new-project"
+              >
+                <PlusCircle className="w-4 h-4 mr-1.5" />
+                New Project
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="space-y-2">
@@ -220,7 +261,7 @@ export default function Home() {
                 name="projectName"
                 value={formData.projectName}
                 onChange={handleInputChange}
-                placeholder="e.g. Acme Corp Redesign"
+                placeholder="e.g. Smith Plumbing Website Refresh (optional)"
                 data-testid="input-project-name"
               />
             </div>
@@ -275,6 +316,21 @@ export default function Home() {
                 </p>
               )}
             </div>
+
+            {formData.orgType === "personal brand" && (
+              <div className="space-y-2">
+                <Label htmlFor="founderName">Your Name</Label>
+                <Input
+                  id="founderName"
+                  name="founderName"
+                  value={formData.founderName}
+                  onChange={handleInputChange}
+                  placeholder="e.g. Marcus Piper"
+                  data-testid="input-founder-name"
+                />
+                <p className="text-xs text-muted-foreground">Used in first-person copy (About, subheadline). Leave blank to use your business name.</p>
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="goal">
@@ -552,21 +608,53 @@ function OutputView({
   onBack: () => void;
   onCopy: (text: string, title: string) => void;
 }) {
-  const { businessName, orgType, goal, audience, services, pages, tone, email, phone, cta, techStack } = formData;
+  const { businessName, founderName, orgType, goal, audience, services, pages, tone, email, phone, cta, techStack } = formData;
 
   const bizName = businessName || "Your Business";
+  const founderDisplay = founderName.trim() || bizName;
   const goalDisplay = goal || "build a strong online presence";
   const audienceDisplay = audience || "your community";
   const toneDisplay = tone || "professional";
   const ctaLabel = cta || "get in touch";
   const ctaUpper = cap(ctaLabel);
 
+  // --- Proper noun capitalization helper ---
+  const properNounMap: Record<string, string> = {
+    linkedin: "LinkedIn", youtube: "YouTube", instagram: "Instagram",
+    facebook: "Facebook", google: "Google", tiktok: "TikTok",
+    wordpress: "WordPress", shopify: "Shopify", quickbooks: "QuickBooks",
+    mailchimp: "Mailchimp", hubspot: "HubSpot",
+  };
+  const fixProperNouns = (s: string): string => {
+    let result = s;
+    for (const [key, val] of Object.entries(properNounMap)) {
+      result = result.replace(new RegExp(`\\b${key}\\b`, "gi"), val);
+    }
+    return result;
+  };
+
   // --- Navigation ---
   const norm = (s: string) => s.toLowerCase().replace(/[\s\-_]+/g, "");
   const reservedNav = new Set(["home", "contact"]);
   const rawPages = pages ? pages.split(",").map(p => p.trim()).filter(Boolean) : [];
   const filteredPages = rawPages.filter(p => !reservedNav.has(norm(p)));
-  const navItems = ["Home", ...filteredPages, "Contact"];
+
+  const getDefaultNavItems = (): string[] => {
+    switch (orgType) {
+      case "software/app startup":       return ["Home", "Features", "How It Works", "Pricing", "Testimonials", "Contact"];
+      case "agency/consultancy":         return ["Home", "Services", "Our Process", "Work", "Testimonials", "Contact"];
+      case "nonprofit":                  return ["Home", "About", "Programs", "Get Involved", "Donate", "Contact"];
+      case "church/faith organization":  return ["Home", "Ministries", "Events", "About", "Give", "Contact"];
+      case "personal brand":             return ["Home", "About", "Services", "Portfolio", "Testimonials", "Contact"];
+      case "local service business":     return ["Home", "Services", "Why Choose Us", "Reviews", "Contact"];
+      case "product shop":               return ["Home", "Shop", "Why Choose Us", "Testimonials", "Contact"];
+      case "community project":          return ["Home", "About", "Get Involved", "Events", "Team", "Contact"];
+      case "restaurant/food":            return ["Home", "Menu", "About", "Order", "Contact"];
+      default:                           return ["Home", "About", "Services", "Contact"];
+    }
+  };
+
+  const navItems = filteredPages.length > 0 ? ["Home", ...filteredPages, "Contact"] : getDefaultNavItems();
   const navString = navItems.join(" • ");
 
   const servicesList = services ? services.split(",").map(s => s.trim()).filter(Boolean) : [];
@@ -1010,9 +1098,9 @@ function OutputView({
 
     if (isSaasType) {
       const featurePhrase = servicesList.length >= 2
-        ? `${servicesList[0].toLowerCase()} and ${servicesList[1].toLowerCase()}`
-        : coreService ? coreService.toLowerCase() : "the tools your team actually needs";
-      return `${bizName} gives your team ${featurePhrase} — without the complexity you don't need. ${ctaUpper}.`;
+        ? `${fixProperNouns(servicesList[0].toLowerCase())} and ${fixProperNouns(servicesList[1].toLowerCase())}`
+        : coreService ? fixProperNouns(coreService.toLowerCase()) : "the tools your team actually needs";
+      return `${bizName} gives your team ${featurePhrase} — without the complexity you don't need.`;
     }
 
     if (isAgencyType) {
@@ -1031,24 +1119,25 @@ function OutputView({
 
     if (isChurchType) {
       const locationPhrase = location ? ` in ${location}` : "";
-      return `We are a growing faith community${locationPhrase} — welcoming everyone, at every stage of their journey. ${ctaUpper}.`;
+      return `We are a growing faith community${locationPhrase} — welcoming everyone, at every stage of their journey.`;
     }
 
     if (isPersonalBrand) {
       const servicePhrase = servicesList.length >= 2
-        ? `${servicesList[0].toLowerCase()} and ${servicesList[1].toLowerCase()}`
-        : coreService ? coreService.toLowerCase() : "coaching and strategy";
+        ? `${fixProperNouns(servicesList[0].toLowerCase())} and ${fixProperNouns(servicesList[1].toLowerCase())}`
+        : coreService ? fixProperNouns(coreService.toLowerCase()) : "coaching and strategy";
       const locationPhrase = location ? ` in ${location}` : "";
+      const aud = audienceDisplay.charAt(0).toLowerCase() + audienceDisplay.slice(1);
       const byTone: Record<string, string> = {
-        professional: `I help ${audienceDisplay} with ${servicePhrase}${locationPhrase} — grounded in strategy and built for real results. ${ctaUpper}.`,
-        bold: `I help ${audienceDisplay} ${cleanGoal || "get real results"}${locationPhrase} — no fluff, no excuses. ${ctaUpper}.`,
-        warm: `I help ${audienceDisplay} with ${servicePhrase}${locationPhrase} and I treat every client like a real person — not a number. ${ctaUpper} whenever you're ready.`,
-        playful: `I help ${audienceDisplay} with ${servicePhrase}${locationPhrase} — and I genuinely love doing it. ${ctaUpper}!`,
-        elegant: `I specialize in ${servicePhrase}${locationPhrase}, helping ${audienceDisplay} with care and precision. ${ctaUpper}.`,
-        "faith-based": `I help ${audienceDisplay} with ${servicePhrase}${locationPhrase} — guided by integrity and a heart for service. ${ctaUpper}.`,
-        "community-focused": `I help ${audienceDisplay} with ${servicePhrase}${locationPhrase} — built around the people I serve. ${ctaUpper}.`,
+        professional: `I help ${aud} with ${servicePhrase}${locationPhrase} — grounded in strategy and built for real results. ${ctaUpper}.`,
+        bold: `I help ${aud} ${cleanGoal || "get real results"}${locationPhrase} — no fluff, no excuses. ${ctaUpper}.`,
+        warm: `I help ${aud} with ${servicePhrase}${locationPhrase} — and I treat every client like a real person, not a number. ${ctaUpper} whenever you're ready.`,
+        playful: `I help ${aud} with ${servicePhrase}${locationPhrase} — and I genuinely love doing it. ${ctaUpper}!`,
+        elegant: `I specialize in ${servicePhrase}${locationPhrase}, helping ${aud} with care and precision. ${ctaUpper}.`,
+        "faith-based": `I help ${aud} with ${servicePhrase}${locationPhrase} — guided by integrity and a heart for service. ${ctaUpper}.`,
+        "community-focused": `I help ${aud} with ${servicePhrase}${locationPhrase} — built around the people I serve. ${ctaUpper}.`,
       };
-      return byTone[toneDisplay] ?? `I help ${audienceDisplay} with ${servicePhrase}${locationPhrase}. ${ctaUpper} today.`;
+      return byTone[toneDisplay] ?? `I help ${aud} with ${servicePhrase}${locationPhrase}. ${ctaUpper} today.`;
     }
 
     const offeringPhrase = servicesList.length >= 2
@@ -1074,12 +1163,12 @@ function OutputView({
   // --- About section ---
   const getAbout = (): string => {
     const offeringList = servicesList.length > 0
-      ? servicesList.slice(0, 3).join(", ").toLowerCase()
+      ? fixProperNouns(servicesList.slice(0, 3).join(", ").toLowerCase())
       : "quality services";
     const goalSentence = cleanGoal ? ` We started ${bizName} with one goal in mind: ${cleanGoal}.` : "";
 
     if (isSaasType) {
-      return `${bizName} is a software product designed to make ${offeringList} simpler and more effective.${goalSentence} We built it because we experienced the problem firsthand and knew there was a better way.`;
+      return `${bizName} is a software product built to streamline ${offeringList} — without the overhead you don't need.${goalSentence} We built it because we experienced the problem firsthand and knew there was a better way.`;
     }
     if (isAgencyType) {
       return `${bizName} is a ${orgType} specializing in ${offeringList}.${goalSentence} We work with clients who want more than deliverables — they want outcomes, and a team that owns the work alongside them.`;
@@ -1093,15 +1182,15 @@ function OutputView({
 
     if (isPersonalBrand) {
       const byTone: Record<string, string> = {
-        professional: `I'm ${bizName} — a ${coreService ? coreService.toLowerCase() + " specialist" : "coach and consultant"} who helps ${audienceDisplay}. ${cleanGoal ? `My mission is simple: ${cleanGoal}.` : ""} I work with each client one-on-one to deliver real results, not just advice.`,
-        bold: `I'm ${bizName}. I help ${audienceDisplay} ${cleanGoal || "achieve results"} — no fluff, no filler, no excuses.`,
-        warm: `Hi, I'm ${bizName}. I started this work because I know firsthand how hard it can be to ${cleanGoal || "make real progress on your own"}. I help ${audienceDisplay} through ${offeringList} — and I treat every client like the individual they are.`,
-        playful: `Hey! I'm ${bizName}, and I love helping ${audienceDisplay}. I created ${offeringList} because I believe everyone deserves support that actually works.`,
-        elegant: `I'm ${bizName} — a specialist in ${offeringList}. My work is built on one principle: every client deserves a personalized approach, thoughtful guidance, and results they can see.`,
-        "faith-based": `I'm ${bizName}, and my work is grounded in a genuine desire to serve. I help ${audienceDisplay} with ${offeringList} — with honesty, care, and a heart for the people I work with.`,
-        "community-focused": `I'm ${bizName}, and I'm deeply invested in helping ${audienceDisplay}. I created ${offeringList} because I believe real change starts with real, personal support.`,
+        professional: `I'm ${founderDisplay} — a ${coreService ? fixProperNouns(coreService.toLowerCase()) + " specialist" : "coach and consultant"} who helps ${audienceDisplay}. ${cleanGoal ? `My mission is simple: ${cleanGoal}.` : ""} I work with each client one-on-one to deliver real results, not just advice.`,
+        bold: `I'm ${founderDisplay}. I help ${audienceDisplay} ${cleanGoal || "achieve results"} — no fluff, no filler, no excuses.`,
+        warm: `Hi, I'm ${founderDisplay}. I started this work because I know firsthand how hard it can be to ${cleanGoal || "make real progress on your own"}. I help ${audienceDisplay} through ${offeringList} — and I treat every client like the individual they are.`,
+        playful: `Hey! I'm ${founderDisplay}, and I love helping ${audienceDisplay}. I created ${offeringList} because I believe everyone deserves support that actually works.`,
+        elegant: `I'm ${founderDisplay} — a specialist in ${offeringList}. My work is built on one principle: every client deserves a personalized approach, thoughtful guidance, and results they can see.`,
+        "faith-based": `I'm ${founderDisplay}, and my work is grounded in a genuine desire to serve. I help ${audienceDisplay} with ${offeringList} — with honesty, care, and a heart for the people I work with.`,
+        "community-focused": `I'm ${founderDisplay}, and I'm deeply invested in helping ${audienceDisplay}. I created ${offeringList} because I believe real change starts with real, personal support.`,
       };
-      return byTone[toneDisplay] ?? `I'm ${bizName}, and I specialize in ${offeringList}. I'm here to help ${audienceDisplay} ${cleanGoal || "move forward with clarity and confidence"}.`;
+      return byTone[toneDisplay] ?? `I'm ${founderDisplay}, and I specialize in ${offeringList}. I'm here to help ${audienceDisplay} ${cleanGoal || "move forward with clarity and confidence"}.`;
     }
 
     const byTone: Record<string, string> = {
@@ -1296,7 +1385,7 @@ function OutputView({
     "nextjs": "Next.js",
     "replit-fullstack": "Replit Full-Stack App",
   };
-  const techStackLabel = techStack ? techStackLabels[techStack] ?? techStack : "HTML / CSS (default)";
+  const techStackLabel = techStack ? techStackLabels[techStack] ?? techStack : "HTML / CSS";
 
   // --- Replit agent prompt ---
   const getTechStackInstructions = (): string => {
@@ -1349,8 +1438,8 @@ ${servicesList.length > 0 ? servicesList.map(s => `- ${s}`).join("\n") : "- [Add
 - About: ${aboutDraft}
 
 ## Contact
-- Email: ${email || "hello@example.com"}
-- Phone: ${phone || "(555) 123-4567"}
+- Email: ${email || "[Add contact email]"}
+- Phone: ${phone || "[Add contact phone]"}
 
 ## Technical Requirements
 - Semantic HTML5: use header, nav, main, section, footer
@@ -1451,8 +1540,8 @@ ${servicesList.length > 0 ? servicesList.map(s => `- ${s}`).join("\n") : "- [Add
     <footer id="contact">
         <div class="container">
             <h2>Contact</h2>
-            ${email ? `<p>Email: <a href="mailto:${email}">${email}</a></p>` : ""}
-            ${phone ? `<p>Phone: <a href="tel:${phone}">${phone}</a></p>` : ""}
+            ${email ? `<p>Email: <a href="mailto:${email}">${email}</a></p>` : "<!-- Add contact email here -->"}
+            ${phone ? `<p>Phone: <a href="tel:${phone}">${phone}</a></p>` : "<!-- Add contact phone here -->"}
             <p class="copyright">&copy; ${new Date().getFullYear()} ${bizName}. All rights reserved.</p>
         </div>
     </footer>
@@ -1621,7 +1710,7 @@ h2 {
     margin: 0 auto;
 }
 
-/* ── Services / Features / Menu ── */
+/* ── ${servicesSectionTitle} ── */
 
 .service-grid {
     display: grid;
@@ -1715,7 +1804,7 @@ footer a:hover { color: white; }
   const contactDraft = [
     email ? `Email: ${email}` : null,
     phone ? `Phone: ${phone}` : null,
-  ].filter(Boolean).join("\n") || "Email: hello@example.com\nPhone: (555) 123-4567";
+  ].filter(Boolean).join("\n") || "No contact info provided — add before handing off.";
 
   return (
     <div className="min-h-[100dvh] bg-background text-foreground py-8 px-4 sm:px-6 lg:px-8">
