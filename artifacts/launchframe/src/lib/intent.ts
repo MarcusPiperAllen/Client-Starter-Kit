@@ -86,6 +86,82 @@ export function intentToFormData(intent: ExtractedIntent): FormData {
   };
 }
 
+// Project kind drives how the build prompt is framed (informational website
+// vs. a software product/SaaS with features, data, and auth).
+export type ProjectKind = "website" | "software";
+
+export function deriveProjectKind(intent: ExtractedIntent): ProjectKind {
+  return intent.organizationType === "software/app startup" ||
+    intent.technologyStack === "replit-fullstack"
+    ? "software"
+    : "website";
+}
+
+// Human-readable labels, mirrored on the server (routes/intent.ts) so the
+// fallback path surfaces the same gap accounting the AI path produces.
+const ESSENTIAL_FIELDS: Array<keyof ExtractedIntent> = [
+  "businessName",
+  "organizationType",
+  "primaryGoal",
+  "audience",
+];
+
+// Mirror of the server's FIELD_LABELS (routes/intent.ts) so the fallback path
+// reports the same fields and ordering as the AI path.
+const FIELD_LABELS: Record<keyof ExtractedIntent, string> = {
+  projectName: "Project name",
+  businessName: "Business / organization name",
+  founderName: "Founder name",
+  organizationType: "Organization type",
+  primaryGoal: "Primary goal",
+  audience: "Target audience",
+  services: "Services / features",
+  pages: "Pages",
+  tone: "Brand tone",
+  callToAction: "Call to action",
+  technologyStack: "Technology stack",
+  contactEmail: "Contact email",
+  contactPhone: "Contact phone",
+  notes: "Notes",
+};
+
+const intentFieldFilled = (intent: ExtractedIntent, field: keyof ExtractedIntent): boolean => {
+  const value = intent[field];
+  return Array.isArray(value) ? value.length > 0 : value.trim() !== "";
+};
+
+export interface IntentSummary {
+  filledFields: string[];
+  missingFields: string[];
+  suggestions: string[];
+}
+
+// Computes filled/missing essential fields plus simple gap-based suggestions.
+// Used for the rule-based fallback so its result mirrors the AI miner's shape.
+export function summarizeIntent(intent: ExtractedIntent): IntentSummary {
+  const labeledFields = Object.keys(FIELD_LABELS) as Array<keyof ExtractedIntent>;
+  const filledFields = labeledFields
+    .filter((f) => intentFieldFilled(intent, f))
+    .map((f) => FIELD_LABELS[f]);
+  const missingFields = ESSENTIAL_FIELDS.filter((f) => !intentFieldFilled(intent, f)).map(
+    (f) => FIELD_LABELS[f],
+  );
+
+  const suggestions: string[] = [];
+  if (!intentFieldFilled(intent, "audience"))
+    suggestions.push("No target audience detected — specify who this is for.");
+  if (!intentFieldFilled(intent, "primaryGoal"))
+    suggestions.push("No clear goal detected — state what visitors should do.");
+  if (!intentFieldFilled(intent, "callToAction"))
+    suggestions.push("Add a clear call to action to strengthen conversions.");
+  if (!intentFieldFilled(intent, "tone"))
+    suggestions.push("No brand tone set — pick one so the design feels intentional.");
+  if (!intentFieldFilled(intent, "services"))
+    suggestions.push("List your key services or features so the site has substance.");
+
+  return { filledFields, missingFields, suggestions };
+}
+
 // ---------------------------------------------------------------------------
 // Mind-dump miner: rule-based extraction of unstructured notes -> intent.
 // No paid AI provider required. Two complementary strategies:

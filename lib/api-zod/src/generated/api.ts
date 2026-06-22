@@ -14,3 +14,46 @@ import * as zod from "zod";
 export const HealthCheckResponse = zod.object({
   status: zod.string(),
 });
+
+/**
+ * Takes raw, unstructured brain-dump text and returns a structured ExtractedIntent (constrained to the form's allowed select values), the detected project kind, lists of filled and missing essential fields, actionable suggestions, and which engine produced the result. Stateless.
+
+ * @summary Mine a brain dump into a structured project intent
+ */
+export const mineIntentBodyTextMax = 8000;
+
+export const MineIntentBody = zod.object({
+  text: zod
+    .string()
+    .min(1)
+    .max(mineIntentBodyTextMax)
+    .describe("The raw brain-dump text to mine."),
+});
+
+export const MineIntentResponse = zod.object({
+  intent: zod
+    .object({
+      projectName: zod.string(),
+      businessName: zod.string(),
+      founderName: zod.string(),
+      organizationType: zod.string(),
+      primaryGoal: zod.string(),
+      audience: zod.string(),
+      services: zod.array(zod.string()),
+      pages: zod.array(zod.string()),
+      tone: zod.string(),
+      callToAction: zod.string(),
+      technologyStack: zod.string(),
+      contactEmail: zod.string(),
+      contactPhone: zod.string(),
+      notes: zod.string(),
+    })
+    .describe(
+      "Canonical project intent. Select fields (organizationType, tone, callToAction, technologyStack) are constrained to the form's allowed values or an empty string when unknown.\n",
+    ),
+  projectKind: zod.enum(["website", "software"]),
+  filledFields: zod.array(zod.string()),
+  missingFields: zod.array(zod.string()),
+  suggestions: zod.array(zod.string()),
+  source: zod.enum(["ai", "fallback"]),
+});

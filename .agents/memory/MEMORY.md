@@ -1,0 +1,1 @@
+- [LaunchFrame Intent Miner](launchframe.md) — stateless AI miner + rule-based fallback; mirrored FIELD_LABELS; kind-adaptive unified build prompt.

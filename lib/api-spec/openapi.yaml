@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: intent
+    description: Intent mining operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,41 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /intent/mine:
+    post:
+      operationId: mineIntent
+      tags: [intent]
+      summary: Mine a brain dump into a structured project intent
+      description: >
+        Takes raw, unstructured brain-dump text and returns a structured
+        ExtractedIntent (constrained to the form's allowed select values), the
+        detected project kind, lists of filled and missing essential fields,
+        actionable suggestions, and which engine produced the result. Stateless.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MineIntentRequest"
+      responses:
+        "200":
+          description: Mining result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MinedIntentResult"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: The AI miner is unavailable or returned an invalid response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +70,105 @@ components:
           type: string
       required:
         - status
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+    MineIntentRequest:
+      type: object
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 8000
+          description: The raw brain-dump text to mine.
+      required:
+        - text
+    ExtractedIntent:
+      type: object
+      description: >
+        Canonical project intent. Select fields (organizationType, tone,
+        callToAction, technologyStack) are constrained to the form's allowed
+        values or an empty string when unknown.
+      properties:
+        projectName:
+          type: string
+        businessName:
+          type: string
+        founderName:
+          type: string
+        organizationType:
+          type: string
+        primaryGoal:
+          type: string
+        audience:
+          type: string
+        services:
+          type: array
+          items:
+            type: string
+        pages:
+          type: array
+          items:
+            type: string
+        tone:
+          type: string
+        callToAction:
+          type: string
+        technologyStack:
+          type: string
+        contactEmail:
+          type: string
+        contactPhone:
+          type: string
+        notes:
+          type: string
+      required:
+        - projectName
+        - businessName
+        - founderName
+        - organizationType
+        - primaryGoal
+        - audience
+        - services
+        - pages
+        - tone
+        - callToAction
+        - technologyStack
+        - contactEmail
+        - contactPhone
+        - notes
+    MinedIntentResult:
+      type: object
+      properties:
+        intent:
+          $ref: "#/components/schemas/ExtractedIntent"
+        projectKind:
+          type: string
+          enum: [website, software]
+        filledFields:
+          type: array
+          items:
+            type: string
+        missingFields:
+          type: array
+          items:
+            type: string
+        suggestions:
+          type: array
+          items:
+            type: string
+        source:
+          type: string
+          enum: [ai, fallback]
+      required:
+        - intent
+        - projectKind
+        - filledFields
+        - missingFields
+        - suggestions
+        - source
 

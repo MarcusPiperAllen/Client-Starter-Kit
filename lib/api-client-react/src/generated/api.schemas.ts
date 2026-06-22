@@ -8,3 +8,62 @@
 export interface HealthStatus {
   status: string;
 }
+
+export interface ErrorResponse {
+  error: string;
+}
+
+export interface MineIntentRequest {
+  /**
+   * The raw brain-dump text to mine.
+   * @minLength 1
+   * @maxLength 8000
+   */
+  text: string;
+}
+
+/**
+ * Canonical project intent. Select fields (organizationType, tone, callToAction, technologyStack) are constrained to the form's allowed values or an empty string when unknown.
+
+ */
+export interface ExtractedIntent {
+  projectName: string;
+  businessName: string;
+  founderName: string;
+  organizationType: string;
+  primaryGoal: string;
+  audience: string;
+  services: string[];
+  pages: string[];
+  tone: string;
+  callToAction: string;
+  technologyStack: string;
+  contactEmail: string;
+  contactPhone: string;
+  notes: string;
+}
+
+export type MinedIntentResultProjectKind =
+  (typeof MinedIntentResultProjectKind)[keyof typeof MinedIntentResultProjectKind];
+
+export const MinedIntentResultProjectKind = {
+  website: "website",
+  software: "software",
+} as const;
+
+export type MinedIntentResultSource =
+  (typeof MinedIntentResultSource)[keyof typeof MinedIntentResultSource];
+
+export const MinedIntentResultSource = {
+  ai: "ai",
+  fallback: "fallback",
+} as const;
+
+export interface MinedIntentResult {
+  intent: ExtractedIntent;
+  projectKind: MinedIntentResultProjectKind;
+  filledFields: string[];
+  missingFields: string[];
+  suggestions: string[];
+  source: MinedIntentResultSource;
+}

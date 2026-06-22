@@ -5,9 +5,30 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Copy, ArrowLeft, Loader2, Frame, Save, RotateCcw, CheckCircle2, AlertCircle, PlusCircle, Sparkles, Wand2, ChevronDown } from "lucide-react";
+import { Copy, ArrowLeft, Loader2, Frame, Save, RotateCcw, CheckCircle2, AlertCircle, PlusCircle, Sparkles, Wand2, ChevronDown, Lightbulb, ListChecks } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { type FormData, type ExtractedIntent, formDataToIntent, intentToFormData, parseBrainDump } from "@/lib/intent";
+import { useMineIntent } from "@workspace/api-client-react";
+import {
+  type FormData,
+  type ExtractedIntent,
+  type ProjectKind,
+  formDataToIntent,
+  intentToFormData,
+  parseBrainDump,
+  summarizeIntent,
+  deriveProjectKind,
+} from "@/lib/intent";
+
+// Result metadata surfaced after mining a brain dump: which fields were filled,
+// which essentials are missing, recommendations, the detected project kind, and
+// whether the AI miner or the rule-based fallback produced the result.
+interface MineMeta {
+  filledFields: string[];
+  missingFields: string[];
+  suggestions: string[];
+  projectKind: ProjectKind;
+  source: "ai" | "fallback";
+}
 
 interface ValidationErrors {
   businessName?: string;
@@ -125,6 +146,9 @@ export default function Home() {
   const [intent, setIntent] = useState<ExtractedIntent | null>(null);
   const [brainDump, setBrainDump] = useState("");
   const [showBrainDump, setShowBrainDump] = useState(true);
+  const [mineMeta, setMineMeta] = useState<MineMeta | null>(null);
+  const mineMutation = useMineIntent();
+  const isMining = mineMutation.isPending;
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFirstRender = useRef(true);
 
@@ -149,6 +173,9 @@ export default function Home() {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+    // The analysis (gaps/suggestions) reflects the mined snapshot; once the user
+    // edits the form it is stale, so drop it to avoid feeding it into the prompt.
+    setMineMeta(null);
     // Clear the validation error for this field as the user types
     if (name in validationErrors) {
       setValidationErrors((prev) => ({ ...prev, [name]: undefined }));
@@ -161,6 +188,7 @@ export default function Home() {
     } else {
       setFormData((prev) => ({ ...prev, [name]: value }));
     }
+    setMineMeta(null);
     if (name in validationErrors) {
       setValidationErrors((prev) => ({ ...prev, [name]: undefined }));
     }
@@ -190,6 +218,7 @@ export default function Home() {
     if (draft) {
       setFormData({ ...emptyData, ...draft, techStack: draft.techStack ?? "", founderName: draft.founderName ?? "" });
       setValidationErrors({});
+      setMineMeta(null);
       toast({ title: "Draft restored", description: "Your saved draft has been loaded.", duration: 2000 });
     } else {
       toast({ title: "No draft found", description: "Save a draft first.", duration: 2000 });
@@ -203,32 +232,86 @@ export default function Home() {
   const handleNewProjectConfirmed = () => {
     setFormData(emptyData);
     setValidationErrors({});
+    setMineMeta(null);
     setShowClearConfirm(false);
     try { localStorage.removeItem(AUTOSAVE_KEY); } catch { /* ignore */ }
   };
 
-  const handleBrainDumpFill = () => {
+  // Runs the AI miner; on any failure falls back to the local rule-based
+  // parser so the feature degrades gracefully without an AI provider.
+  const runMiner = async (text: string): Promise<{ intent: ExtractedIntent; meta: MineMeta }> => {
+    try {
+      const res = await mineMutation.mutateAsync({ data: { text } });
+      return {
+        intent: res.intent,
+        meta: {
+          filledFields: res.filledFields,
+          missingFields: res.missingFields,
+          suggestions: res.suggestions,
+          projectKind: res.projectKind,
+          source: "ai",
+        },
+      };
+    } catch {
+      const intent = parseBrainDump(text);
+      const summary = summarizeIntent(intent);
+      return {
+        intent,
+        meta: { ...summary, projectKind: deriveProjectKind(intent), source: "fallback" },
+      };
+    }
+  };
+
+  // Merge an extracted intent into the form, only overwriting fields the miner
+  // actually populated so existing manual entries are preserved. Returns the
+  // merged form so callers can build output from the full (not just mined) data.
+  const applyIntentToForm = (intent: ExtractedIntent): { merged: FormData; filledCount: number } => {
+    const parsed = intentToFormData(intent);
+    const filledKeys = (Object.keys(parsed) as Array<keyof FormData>).filter((k) => parsed[k].trim() !== "");
+    const merged = { ...formData };
+    for (const k of filledKeys) merged[k] = parsed[k];
+    setFormData(merged);
+    setValidationErrors({});
+    return { merged, filledCount: filledKeys.length };
+  };
+
+  // Primary brain-dump path: mine, fill the form, and surface the gaps panel
+  // for review before the user generates ("Review First").
+  const handleBrainDumpFill = async () => {
     const text = brainDump.trim();
     if (!text) {
       toast({ title: "Nothing to parse", description: "Paste some notes first.", duration: 2000 });
       return;
     }
-    const parsed = intentToFormData(parseBrainDump(text));
-    const filledKeys = (Object.keys(parsed) as Array<keyof FormData>).filter((k) => parsed[k].trim() !== "");
-    setFormData((prev) => {
-      const next = { ...prev };
-      for (const k of filledKeys) next[k] = parsed[k];
-      return next;
-    });
-    setValidationErrors({});
-    const count = filledKeys.length;
+    const { intent: mined, meta } = await runMiner(text);
+    const { filledCount } = applyIntentToForm(mined);
+    setMineMeta(meta);
     toast({
-      title: count > 0 ? `Filled ${count} field${count === 1 ? "" : "s"}` : "No fields detected",
-      description: count > 0
-        ? "Review and edit the form below, then generate."
-        : "Try labels like 'Business:', 'Goal:', or 'Services:'.",
-      duration: 3000,
+      title: meta.source === "ai" ? "Analyzed your notes" : "Filled from notes (offline)",
+      description: meta.source === "ai"
+        ? `Filled ${filledCount} field${filledCount === 1 ? "" : "s"}. Review the gaps below, then generate.`
+        : "AI was unavailable, so we used the built-in parser. Review and edit below.",
+      duration: 3500,
     });
+  };
+
+  // Secondary brain-dump path: mine and jump straight to the generated prompt,
+  // while still populating the form so "Back to Edit" works.
+  const handleAutoBuild = async () => {
+    const text = brainDump.trim();
+    if (!text) {
+      toast({ title: "Nothing to parse", description: "Paste some notes first.", duration: 2000 });
+      return;
+    }
+    const { intent: mined, meta } = await runMiner(text);
+    const { merged } = applyIntentToForm(mined);
+    setMineMeta(meta);
+    // Build output from the full merged form so any pre-existing manual entries
+    // are preserved, not just the mined subset.
+    setIntent(formDataToIntent(merged));
+    setIsOutputMode(true);
+    try { localStorage.removeItem(AUTOSAVE_KEY); } catch { /* ignore */ }
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleGenerate = () => {
@@ -264,7 +347,15 @@ export default function Home() {
   };
 
   if (isOutputMode && intent) {
-    return <OutputView intent={intent} onBack={handleBackToForm} onCopy={handleCopy} />;
+    return (
+      <OutputView
+        intent={intent}
+        projectKind={mineMeta?.projectKind ?? deriveProjectKind(intent)}
+        suggestions={mineMeta?.suggestions ?? []}
+        onBack={handleBackToForm}
+        onCopy={handleCopy}
+      />
+    );
   }
 
   const hasErrors = !!(
@@ -319,14 +410,73 @@ export default function Home() {
                 Tip: lines like <span className="font-medium text-foreground/80">Business:</span>, <span className="font-medium text-foreground/80">Goal:</span>, or <span className="font-medium text-foreground/80">Services:</span> are detected automatically. Free-form notes work too.
               </p>
               <div className="flex flex-col sm:flex-row gap-3">
-                <Button className="flex-1" onClick={handleBrainDumpFill} data-testid="button-fill-from-notes">
-                  <Wand2 className="w-4 h-4 mr-2" />
-                  Auto-fill form
+                <Button className="flex-1" onClick={handleBrainDumpFill} disabled={isMining || !brainDump.trim()} data-testid="button-fill-from-notes">
+                  {isMining ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Analyzing…</>
+                  ) : (
+                    <><Wand2 className="w-4 h-4 mr-2" />Review &amp; fill form</>
+                  )}
                 </Button>
-                <Button variant="outline" onClick={() => setBrainDump("")} disabled={!brainDump} data-testid="button-clear-brain-dump">
+                <Button variant="secondary" className="flex-1" onClick={handleAutoBuild} disabled={isMining || !brainDump.trim()} data-testid="button-auto-build">
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  Auto-build prompt
+                </Button>
+                <Button variant="outline" onClick={() => setBrainDump("")} disabled={!brainDump || isMining} data-testid="button-clear-brain-dump">
                   Clear
                 </Button>
               </div>
+
+              {mineMeta && (
+                <div className="mt-1 rounded-lg border border-border bg-background p-4 space-y-3" data-testid="panel-mine-summary">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-semibold">Analysis</span>
+                    <span
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${mineMeta.source === "ai" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}
+                      data-testid="badge-mine-source"
+                    >
+                      {mineMeta.source === "ai" ? "AI analyzed" : "Offline parser"}
+                      {" · "}
+                      {mineMeta.projectKind === "software" ? "Software / app" : "Website"}
+                    </span>
+                  </div>
+
+                  {mineMeta.filledFields.length > 0 && (
+                    <div className="flex items-start gap-2 text-sm">
+                      <CheckCircle2 className="w-4 h-4 mt-0.5 text-green-600 shrink-0" />
+                      <p className="text-muted-foreground">
+                        <span className="font-medium text-foreground">Captured:</span> {mineMeta.filledFields.join(", ")}
+                      </p>
+                    </div>
+                  )}
+
+                  {mineMeta.missingFields.length > 0 && (
+                    <div className="flex items-start gap-2 text-sm" data-testid="text-missing-fields">
+                      <ListChecks className="w-4 h-4 mt-0.5 text-amber-600 shrink-0" />
+                      <p className="text-muted-foreground">
+                        <span className="font-medium text-foreground">Still needed:</span> {mineMeta.missingFields.join(", ")}
+                      </p>
+                    </div>
+                  )}
+
+                  {mineMeta.suggestions.length > 0 && (
+                    <div className="flex items-start gap-2 text-sm">
+                      <Lightbulb className="w-4 h-4 mt-0.5 text-amber-500 shrink-0" />
+                      <div className="space-y-1">
+                        <p className="font-medium text-foreground">Suggestions</p>
+                        <ul className="list-disc pl-4 space-y-0.5 text-muted-foreground">
+                          {mineMeta.suggestions.map((s, i) => (
+                            <li key={i}>{s}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+
+                  <p className="text-xs text-muted-foreground">
+                    These notes are also folded into your build prompt so the agent fills any gaps sensibly.
+                  </p>
+                </div>
+              )}
             </CardContent>
           )}
         </Card>
@@ -714,10 +864,14 @@ export default function Home() {
 
 function OutputView({
   intent,
+  projectKind = "website",
+  suggestions = [],
   onBack,
   onCopy,
 }: {
   intent: ExtractedIntent;
+  projectKind?: ProjectKind;
+  suggestions?: string[];
   onBack: () => void;
   onCopy: (text: string, title: string) => void;
 }) {
@@ -1644,6 +1798,50 @@ ${keywords.length > 0 ? keywords.map((k, i) => `${i + 1}. ${k}`).join("\n") : "1
   const headerBg = c.darkBg ? "#1e293b" : "#ffffff";
   const navLinkColor = c.darkBg ? "#e2e8f0" : c.muted;
 
+  // --- Project-kind framing & gap-filling guidance (T007) ---
+  // The prompt must be self-sufficient: where the intake left essentials blank,
+  // it instructs the agent to make sensible, cohesive choices rather than emit
+  // placeholders, and it adapts language for an informational website vs. a
+  // software product / SaaS app.
+  const isSoftware = projectKind === "software";
+  const projectNoun = isSoftware
+    ? "fully functional software product (web app)"
+    : "modern, clean, multi-page website";
+
+  // Sections present only for software builds: product surface, data, and auth.
+  const softwareSection = isSoftware
+    ? `
+
+## Application Requirements (Software / Web App)
+This is a working software product, not a brochure site. Build the actual product experience in addition to any marketing/landing content.
+- Core features: ${servicesList.length > 0 ? servicesList.join(", ") : "infer a focused MVP feature set from the goal and audience above, and state the assumptions you make"}.
+- Primary screens: design the key app screens these features require (e.g. dashboard, list/detail, create/edit, settings) with clear navigation between them.
+- Data model: define the main entities, their fields, and relationships needed to support the features; choose sensible types and constraints.
+- Authentication: include user accounts (sign up, log in, session handling) and protect authenticated areas; if the product is single-user or public, say so and justify it.
+- State & persistence: choose an appropriate data store and wire create/read/update/delete flows for the core entities.`
+    : "";
+
+  // Gap-filling directives — keep the agent from leaving holes for anything the
+  // intake did not specify.
+  const gapFillSection = `
+
+## Fill-the-Gaps Instructions
+Where any detail below is unspecified, do not leave placeholders — make professional, cohesive choices and briefly note what you chose:
+- Color palette: ${tone ? `derive an accessible palette from the "${toneDisplay}" tone and the suggested colors below` : "choose a cohesive, accessible palette suited to the audience and industry"}.
+- Typography: select a readable heading + body font pairing consistent with the tone${font.family ? ` (a good starting point: ${font.family})` : ""}.
+- Visual styling: apply a consistent spacing scale, button/card styles, and hover/focus states across every section.
+- Responsiveness: build mobile-first and verify layouts at 360px, 768px, and 1280px with no horizontal scroll.
+- Accessibility: meet WCAG AA contrast, use semantic landmarks, full keyboard navigation, visible focus states, and descriptive alt text.${isSoftware ? "\n- Product gaps: where features, data, or auth are underspecified, pick the most reasonable MVP behavior and state the assumption." : ""}`;
+
+  // Surface any analyzer recommendations so the agent can address them.
+  const recommendationsSection = suggestions.length > 0
+    ? `
+
+## Recommendations to Address
+Consider these while building; resolve them with sensible defaults where the intake is silent:
+${suggestions.map((s) => `- ${s}`).join("\n")}`
+    : "";
+
   // --- Universal Agent Build Prompt (primary output) ---
   // Agent-agnostic, self-contained, and derived entirely from ExtractedIntent.
   const buildPrompt = `# Universal Agent Build Prompt
@@ -1651,7 +1849,7 @@ ${keywords.length > 0 ? keywords.map((k, i) => `${i + 1}. ${k}`).join("\n") : "1
 Use this prompt in your preferred AI coding agent (Claude Code, Cursor, Replit Agent, Gemini, ChatGPT, or any other builder). It is self-contained — paste it in as-is.
 
 ## Project Summary
-Build a modern, clean, fully responsive ${isSaasType ? "marketing/landing site" : "multi-page website"} for ${bizName}${projectName ? ` (project: ${projectName})` : ""}, a ${orgType || "local service business"}.${goalDisplay ? ` Primary goal: ${goalDisplay}.` : ""}
+Build a ${projectNoun} for ${bizName}${projectName ? ` (project: ${projectName})` : ""}, a ${orgType || "local service business"}.${goalDisplay ? ` Primary goal: ${goalDisplay}.` : ""}${softwareSection}
 
 ## Target Audience
 ${audienceDisplay}
@@ -1702,7 +1900,7 @@ ${techStackInstructions}
 - Fully responsive with no horizontal scroll at any screen width.
 - Mobile navigation via an accessible hamburger toggle (aria-label, keyboard operable).
 - Meet WCAG AA color contrast, provide visible focus states, and add descriptive alt text on all images.
-- Respect prefers-reduced-motion for any animation or transition.
+- Respect prefers-reduced-motion for any animation or transition.${gapFillSection}${recommendationsSection}
 
 ## Contact Requirements
 - Email: ${email || "[Add contact email]"}
@@ -1712,7 +1910,7 @@ ${techStackInstructions}
 ## Implementation & Testing
 - ${isClassicStack ? "Use CSS custom properties for all colors and fonts; load fonts via Google Fonts." : "Use a consistent component/styling system (e.g. Tailwind CSS)."}
 - Add smooth scrolling for in-page anchor links.
-- Before finishing, verify: mobile and desktop layouts render correctly, the mobile nav toggle works, all navigation links resolve, there are no console errors, and the page passes a basic accessibility check.${notes ? `\n\n## Additional Notes\n${notes}` : ""}`;
+- Before finishing, verify: mobile and desktop layouts render correctly, the mobile nav toggle works, all navigation links resolve, there are no console errors, and the page passes a basic accessibility check.${isSoftware ? "\n- For the application: verify each core feature works end to end, authentication protects the right routes, and create/read/update/delete flows persist correctly." : ""}${notes ? `\n\n## Additional Notes\n${notes}` : ""}`;
 
   // --- Starter HTML ---
   const htmlDraft = `<!DOCTYPE html>

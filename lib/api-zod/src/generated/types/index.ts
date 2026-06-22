@@ -6,4 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from "./errorResponse";
+export * from "./extractedIntent";
 export * from "./healthStatus";
+export * from "./minedIntentResult";
+export * from "./minedIntentResultProjectKind";
+export * from "./minedIntentResultSource";
+export * from "./mineIntentRequest";

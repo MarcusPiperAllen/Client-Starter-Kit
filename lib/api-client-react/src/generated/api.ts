@@ -5,18 +5,26 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import type {
+  MutationFunction,
   QueryFunction,
   QueryKey,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from "@tanstack/react-query";
 
-import type { HealthStatus } from "./api.schemas";
+import type {
+  ErrorResponse,
+  HealthStatus,
+  MineIntentRequest,
+  MinedIntentResult,
+} from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
-import type { ErrorType } from "../custom-fetch";
+import type { ErrorType, BodyType } from "../custom-fetch";
 
 type AwaitedInput<T> = PromiseLike<T> | T;
 
@@ -99,3 +107,91 @@ export function useHealthCheck<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * Takes raw, unstructured brain-dump text and returns a structured ExtractedIntent (constrained to the form's allowed select values), the detected project kind, lists of filled and missing essential fields, actionable suggestions, and which engine produced the result. Stateless.
+
+ * @summary Mine a brain dump into a structured project intent
+ */
+export const getMineIntentUrl = () => {
+  return `/api/intent/mine`;
+};
+
+export const mineIntent = async (
+  mineIntentRequest: MineIntentRequest,
+  options?: RequestInit,
+): Promise<MinedIntentResult> => {
+  return customFetch<MinedIntentResult>(getMineIntentUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(mineIntentRequest),
+  });
+};
+
+export const getMineIntentMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof mineIntent>>,
+    TError,
+    { data: BodyType<MineIntentRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof mineIntent>>,
+  TError,
+  { data: BodyType<MineIntentRequest> },
+  TContext
+> => {
+  const mutationKey = ["mineIntent"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof mineIntent>>,
+    { data: BodyType<MineIntentRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return mineIntent(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MineIntentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof mineIntent>>
+>;
+export type MineIntentMutationBody = BodyType<MineIntentRequest>;
+export type MineIntentMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Mine a brain dump into a structured project intent
+ */
+export const useMineIntent = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof mineIntent>>,
+    TError,
+    { data: BodyType<MineIntentRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof mineIntent>>,
+  TError,
+  { data: BodyType<MineIntentRequest> },
+  TContext
+> => {
+  return useMutation(getMineIntentMutationOptions(options));
+};
