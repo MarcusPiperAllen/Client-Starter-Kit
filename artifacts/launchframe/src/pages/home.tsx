@@ -122,6 +122,61 @@ function validate(data: FormData): ValidationErrors {
 
 const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 
+// Truncates a string at the last word boundary before maxLen characters,
+// stripping any trailing punctuation left after the cut.
+function truncateAtWord(s: string, maxLen: number): string {
+  if (s.length <= maxLen) return s;
+  const cut = s.slice(0, maxLen);
+  const lastSpace = cut.lastIndexOf(" ");
+  const trimmed = lastSpace > 0 ? cut.slice(0, lastSpace) : cut;
+  return trimmed.replace(/[,;:]+$/, "");
+}
+
+// Turns a long primary-goal string into a concise 5–7 word marketing headline.
+// Finds the first strong action verb after any leading "help/to [audience]" prefix,
+// then takes up to 7 words stopping naturally at the first comma.
+function summarizeGoal(goal: string): string {
+  if (!goal) return "";
+  const words = goal.trim().split(/\s+/);
+  if (words.length <= 7) return cap(goal);
+
+  const ACTION_VERBS = new Set([
+    "create", "build", "launch", "drive", "grow", "generate", "increase",
+    "attract", "find", "run", "manage", "track", "connect", "sell", "scale",
+    "save", "reduce", "improve", "enable", "streamline", "simplify",
+    "transform", "develop", "start", "make", "establish", "design", "deliver",
+    "earn", "win", "capture", "bring", "close", "convert", "retain", "expand",
+    "acquire", "book", "train", "teach", "reach", "serve", "support",
+    "provide", "offer", "showcase", "promote",
+  ]);
+
+  const skipFirst = /^(help|to)\b/i.test(words[0]);
+  let verbIdx = -1;
+  for (let i = skipFirst ? 1 : 0; i < Math.min(words.length, 14); i++) {
+    const w = words[i].replace(/[^a-zA-Z]/g, "").toLowerCase();
+    if (ACTION_VERBS.has(w)) { verbIdx = i; break; }
+  }
+
+  const source = verbIdx >= 0 ? words.slice(verbIdx) : words;
+  const result: string[] = [];
+  for (const w of source) {
+    const clean = w.replace(/,$/, "").trim();
+    result.push(clean);
+    if (w.endsWith(",") || result.length >= 7) break;
+  }
+
+  // Strip trailing prepositions/conjunctions that leave the phrase hanging.
+  const TRAILING_STOP = new Set([
+    "through", "via", "with", "without", "by", "for", "to", "into", "from",
+    "of", "about", "and", "or", "but", "in", "on", "at", "the", "a", "an",
+  ]);
+  while (result.length > 1 && TRAILING_STOP.has(result[result.length - 1].toLowerCase())) {
+    result.pop();
+  }
+
+  return cap(result.join(" "));
+}
+
 export default function Home() {
   const { toast } = useToast();
   const [formData, setFormData] = useState<FormData>(() => {
@@ -280,7 +335,7 @@ export default function Home() {
   const handleBrainDumpFill = async () => {
     const text = brainDump.trim();
     if (!text) {
-      toast({ title: "Nothing to parse", description: "Paste some notes first.", duration: 2000 });
+      toast({ title: "Nothing to parse.", description: "Paste some notes first.", duration: 2000 });
       return;
     }
     const { intent: mined, meta } = await runMiner(text);
@@ -300,7 +355,7 @@ export default function Home() {
   const handleAutoBuild = async () => {
     const text = brainDump.trim();
     if (!text) {
-      toast({ title: "Nothing to parse", description: "Paste some notes first.", duration: 2000 });
+      toast({ title: "Nothing to parse.", description: "Paste some notes first.", duration: 2000 });
       return;
     }
     const { intent: mined, meta } = await runMiner(text);
@@ -913,6 +968,19 @@ function OutputView({
     return result;
   };
 
+  // Title-cases a service/feature name, preserving common tech acronyms and
+  // fixing brand-specific capitalisation (LinkedIn, YouTube, etc.).
+  const SAAS_ACRONYMS = new Set(["ai", "api", "crm", "seo", "ppc", "hr", "erp", "saas", "html", "css", "js", "ui", "ux", "b2b", "b2c", "sms", "vip", "roi", "kpi"]);
+  const formatServiceName = (s: string): string => {
+    const titled = s.split(/\s+/).map(w => {
+      const lower = w.toLowerCase();
+      return SAAS_ACRONYMS.has(lower)
+        ? lower.toUpperCase()
+        : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+    }).join(" ");
+    return fixProperNouns(titled);
+  };
+
   // --- Navigation ---
   const norm = (s: string) => s.toLowerCase().replace(/[\s\-_]+/g, "");
   const reservedNav = new Set(["home", "contact"]);
@@ -1028,9 +1096,9 @@ function OutputView({
   const getBenefitHeadline = (): string => {
     const loc = location ? ` in ${location}` : "";
     switch (serviceTheme) {
-      case "saas":          return cleanGoal ? `${cap(cleanGoal)}` : "Software That Solves the Real Problem";
-      case "agency":        return cleanGoal ? `${cap(cleanGoal)}` : "Strategy, Design, and Execution — Under One Roof";
-      case "nonprofit":     return cleanGoal ? `${cap(cleanGoal)}` : "Making a Lasting Difference in Our Community";
+      case "saas":          return cleanGoal ? summarizeGoal(cleanGoal) : "Software That Solves the Real Problem";
+      case "agency":        return cleanGoal ? summarizeGoal(cleanGoal) : "Strategy, Design, and Execution — Under One Roof";
+      case "nonprofit":     return cleanGoal ? summarizeGoal(cleanGoal) : "Making a Lasting Difference in Our Community";
       case "church":        return `A Place to Belong${loc ? `, ${loc}` : ""}`;
       case "food":          return `Fresh Food Worth Coming Back For`;
       case "home-entertainment": return "Simple TV Box Setup & Home Entertainment Support";
@@ -1076,7 +1144,6 @@ function OutputView({
       if (/search|filter|sort/.test(n)) return "Find exactly what you need fast, with flexible search and filtering options.";
       if (/export|download|import|csv/.test(n)) return "Move your data in and out easily — exports in standard formats on demand.";
       if (/billing|subscript|payment|invoice|plan/.test(n)) return "Manage subscriptions, billing cycles, and invoices without leaving the platform.";
-      if (/onboard|setup|wizard|getting.?start/.test(n)) return "Guide new users through setup quickly so they hit value before day one ends.";
       if (/mobile|ios|android|app/.test(n)) return "Access the full experience on any device — native iOS and Android apps included.";
       if (/task.?manag|to.?do.?list|task.?track/.test(n)) return "Organize, assign, and track tasks in one place — so nothing falls through the cracks.";
       if (/project.?manag|project.?track/.test(n)) return "Manage projects from kickoff to completion — with full visibility for everyone on the team.";
@@ -1084,7 +1151,22 @@ function OutputView({
       if (/schedul|calendar|appointment/.test(n)) return "Schedule meetings, manage availability, and coordinate time without the back-and-forth emails.";
       if (/workflow.?automat|automat.?workflow/.test(n)) return "Build automated workflows that eliminate repetitive manual steps and keep work moving on its own.";
       if (/automat|trigger/.test(n)) return "Automate repetitive tasks so your team can focus on work that actually matters.";
+      // Specific product-type patterns — must come BEFORE the generic /onboard|wizard/ catch-all
+      if (/ai.*(proposal|quote|estimat|pitch)|proposal.*ai/.test(n)) return "Instantly generate polished, AI-powered proposals — ready to send in minutes, not hours.";
+      if (/ai.*(onboard|client)|onboard.*ai/.test(n)) return "AI-guided client onboarding that personalises every step and collects the right information automatically.";
+      if (/proposal.?(builder|generat|tool|wizard|creator)/.test(n)) return "Build and send professional proposals in minutes — customisable templates, pricing tables, and e-signature included.";
+      if (/client.?onboard|onboard.?client|onboard.?wizard/.test(n)) return "Walk new clients through a guided onboarding flow that sets expectations and captures every detail upfront.";
+      if (/client.?portal|client.?hub|client.?dash/.test(n)) return "A dedicated space where clients can view progress, download deliverables, and communicate — all without email chains.";
+      if (/contract.?template|template.*contract/.test(n)) return "Ready-to-use contract templates you can customise and send in seconds — professionally formatted and legally sound.";
+      if (/contract/.test(n)) return "Create, send, and track client contracts from one place — with built-in e-signature and status visibility.";
+      if (/project.?brief|brief.?generat/.test(n)) return "Generate detailed project briefs from a short intake form — so every client and team member starts fully aligned.";
+      if (/document.?generat|generat.?document|doc.?gen/.test(n)) return "Auto-generate professional documents from smart templates — customised per client with no manual formatting.";
+      if (/workflow.?build|build.?workflow/.test(n)) return "Design and launch multi-step workflows visually — no code required, no bottlenecks.";
+      if (/\bcrm\b|customer.?relat.?manag/.test(n)) return "Track every contact, deal, and follow-up in one organised view — so nothing slips through the cracks.";
+      if (/lead.?manag|manag.?lead|lead.?track|lead.?captur|lead.?pipelin/.test(n)) return "Capture, qualify, and nurture leads through a clear pipeline — so your team always knows the next move.";
       if (/ai|smart|ml|intelligence|predict/.test(n)) return "Intelligent features that learn from your data and surface what matters most.";
+      // Generic user onboarding — kept after the specific client-onboarding patterns above
+      if (/onboard|setup|wizard|getting.?start/.test(n)) return "Guide new users through setup quickly so they hit value before day one ends.";
       if (/support|help|ticket|chat|inbox/.test(n)) return "Built-in support tools so your team can respond to users without switching tabs.";
       if (/permiss|role|access|admin/.test(n)) return "Granular permissions let you control exactly who sees and does what.";
       return `A focused feature that handles ${name.toLowerCase()} cleanly, without added complexity.`;
@@ -1332,15 +1414,15 @@ function OutputView({
     switch (orgType) {
       case "software/app startup":
         return cleanGoal
-          ? `${bizName} — ${cap(cleanGoal)}`
+          ? `${bizName} — ${summarizeGoal(cleanGoal)}`
           : `${bizName} — Built for the Problem That Actually Matters`;
       case "agency/consultancy":
         return cleanGoal
-          ? `${bizName} — ${cap(cleanGoal)}`
+          ? `${bizName} — ${summarizeGoal(cleanGoal)}`
           : `${bizName} — Strategy and Execution, Without the Guesswork`;
       case "nonprofit":
         return cleanGoal
-          ? `${bizName} — ${cap(cleanGoal)}`
+          ? `${bizName} — ${summarizeGoal(cleanGoal)}`
           : `${bizName} — Making a Lasting Difference`;
       case "church/faith organization":
         return location
@@ -1350,7 +1432,7 @@ function OutputView({
         return `${bizName} — ${getBenefitHeadline()}`;
       case "personal brand":
         return cleanGoal
-          ? `${bizName} — ${cap(cleanGoal)}`
+          ? `${bizName} — ${summarizeGoal(cleanGoal)}`
           : serviceTheme !== "general"
             ? `${bizName} — ${getBenefitHeadline()}`
             : `${bizName} — Helping You Move Forward`;
@@ -1379,15 +1461,15 @@ function OutputView({
 
     if (isSaasType) {
       const featurePhrase = servicesList.length >= 2
-        ? `${fixProperNouns(servicesList[0].toLowerCase())} and ${fixProperNouns(servicesList[1].toLowerCase())}`
-        : coreService ? fixProperNouns(coreService.toLowerCase()) : "the tools your team actually needs";
+        ? `${formatServiceName(servicesList[0])} and ${formatServiceName(servicesList[1])}`
+        : coreService ? formatServiceName(coreService) : "the tools your team actually needs";
       return `${bizName} gives your team ${featurePhrase} — without the complexity you don't need.`;
     }
 
     if (isAgencyType) {
       const servicePhrase = servicesList.length >= 2
-        ? `${servicesList[0].toLowerCase()} and ${servicesList[1].toLowerCase()}`
-        : coreService ? coreService.toLowerCase() : "full-service solutions";
+        ? `${formatServiceName(servicesList[0])} and ${formatServiceName(servicesList[1])}`
+        : coreService ? formatServiceName(coreService) : "full-service solutions";
       const locationPhrase = location ? ` for clients in ${location}` : "";
       return `We deliver ${servicePhrase}${locationPhrase} — grounded in strategy, built to perform. ${ctaUpper}.`;
     }
@@ -1405,8 +1487,8 @@ function OutputView({
 
     if (isPersonalBrand) {
       const servicePhrase = servicesList.length >= 2
-        ? `${fixProperNouns(servicesList[0].toLowerCase())} and ${fixProperNouns(servicesList[1].toLowerCase())}`
-        : coreService ? fixProperNouns(coreService.toLowerCase()) : "coaching and strategy";
+        ? `${formatServiceName(servicesList[0])} and ${formatServiceName(servicesList[1])}`
+        : coreService ? formatServiceName(coreService) : "coaching and strategy";
       const locationPhrase = location ? ` in ${location}` : "";
       const aud = audienceDisplay.charAt(0).toLowerCase() + audienceDisplay.slice(1);
       const byTone: Record<string, string> = {
@@ -1707,16 +1789,33 @@ function OutputView({
 
   // --- SEO title and meta description (reused in getSeoPack and htmlDraft head) ---
   const seoTitle = (() => {
-    const goalPart = cleanGoal ? cap(cleanGoal.slice(0, 60)) : coreService ? cap(coreService) : "Quality Service";
+    const goalPart = cleanGoal ? summarizeGoal(cleanGoal) : coreService ? cap(coreService) : "Quality Service";
     return location ? `${bizName} | ${goalPart} — ${location}` : `${bizName} | ${goalPart}`;
   })();
   const seoMetaDesc = (() => {
     const audLower = audienceDisplay.charAt(0).toLowerCase() + audienceDisplay.slice(1);
-    const verb = isSaasType ? "helps teams with" : isPersonalBrand ? "helps" : "provides";
     const offering = coreService ? fixProperNouns(coreService.toLowerCase()) : cleanGoal ? cleanGoal : "quality services";
     const ctaPhrase = cta ? ` ${cap(cta)} today.` : "";
-    let raw = `${bizName} ${verb} ${audLower} with ${offering}.${ctaPhrase}`;
-    if (raw.length > 155) raw = raw.slice(0, 152) + "...";
+    const subject = isSaasType ? "teams" : audLower;
+
+    let action: string;
+    if (isNonprofitType || isChurchType || orgType === "community project") {
+      // For mission-driven orgs: reuse summarizeGoal's verb-scan to produce a compact
+      // action phrase. summarizeGoal("help families build homes") → "Build Homes",
+      // so lowercase it and prepend nothing (it reads naturally as "helps [audience] build homes").
+      if (cleanGoal) {
+        const phrase = summarizeGoal(cleanGoal).toLowerCase();
+        // If the phrase still starts with "help", fall back to "with [offering]"
+        action = /^help\b/i.test(phrase) ? `with ${offering}` : phrase;
+      } else {
+        action = `with ${offering}`;
+      }
+    } else {
+      action = `with ${offering}`;
+    }
+
+    let raw = `${bizName} helps ${subject} ${action}.${ctaPhrase}`;
+    if (raw.length > 155) raw = truncateAtWord(raw, 152) + "...";
     return raw;
   })();
 

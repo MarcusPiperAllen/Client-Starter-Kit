@@ -312,6 +312,10 @@ export function parseBrainDump(text: string): ExtractedIntent {
     if (first.split(/\s+/).length <= 5 && first.length <= 60 && !/[.!?]$/.test(first)) {
       intent.businessName = first;
       leftover = leftover.slice(1);
+    } else {
+      // Single-paragraph dump: infer name from "CompanyName is a ..." opening sentence.
+      const m = first.match(/^([A-Z][A-Za-z0-9 &'.-]{1,50}?)\s+(?:is|are|was)\s+(?:a|an|the)\b/);
+      if (m) intent.businessName = m[1].trim();
     }
   }
   if (!intent.primaryGoal) {

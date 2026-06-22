@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { splitList, formDataToIntent, type FormData } from "./intent";
+import { splitList, formDataToIntent, parseBrainDump, type FormData } from "./intent";
 
 describe("splitList", () => {
   it("returns an empty array for an empty string", () => {
@@ -122,5 +122,36 @@ describe("formDataToIntent", () => {
         "tone",
       ].sort(),
     );
+  });
+});
+
+describe("parseBrainDump — business name extraction", () => {
+  it("extracts business name from a labeled line", () => {
+    const intent = parseBrainDump("Business: Iron Rod Steel\nGoal: generate leads");
+    expect(intent.businessName).toBe("Iron Rod Steel");
+  });
+
+  it("infers business name from a short unlabeled first line (≤5 words, no terminal punctuation)", () => {
+    const intent = parseBrainDump("Bright Smile Dental\nGoal: book appointments");
+    expect(intent.businessName).toBe("Bright Smile Dental");
+  });
+
+  it("infers business name from 'Company is a ...' opening in a single-paragraph dump", () => {
+    const intent = parseBrainDump(
+      "Iron Rod Steel is a structural steel fabrication company. We want to generate leads from local contractors.",
+    );
+    expect(intent.businessName).toBe("Iron Rod Steel");
+  });
+
+  it("does not infer business name from a lowercase opening that lacks the pattern", () => {
+    const intent = parseBrainDump("we are a dental practice trying to book appointments online.");
+    expect(intent.businessName).toBe("");
+  });
+
+  it("does not overwrite a labeled business name with the paragraph heuristic", () => {
+    const intent = parseBrainDump(
+      "Business: Apex Steel\nApex Steel is a fabrication company. We want more leads.",
+    );
+    expect(intent.businessName).toBe("Apex Steel");
   });
 });
