@@ -1,0 +1,235 @@
+This test is actually extremely valuable because it shows us **where the AI miner succeeded and where the generator is still dumb.**
+
+### What Worked Well
+
+The miner correctly extracted:
+
+✅ BriefStack
+✅ Software/App Startup
+✅ SaaS product concept
+✅ Target audience
+✅ Features
+✅ Pages
+✅ CTA
+✅ Tech stack
+✅ Contact info
+✅ Missing requirements
+
+That's a huge improvement over regex-only parsing.
+
+The analysis section is actually pretty smart:
+
+> User permissions are not defined
+
+> Client access is unclear
+
+> Billing is mentioned for later
+
+Those are exactly the kinds of things a product strategist would ask.
+
+---
+
+### Where the Product Breaks
+
+The problem is no longer extraction.
+
+The problem is **generation.**
+
+Look at this:
+
+Hero:
+
+> BriefStack — Build an MVP web application that helps
+
+That isn't a headline.
+
+That's a chopped sentence.
+
+---
+
+Look at this:
+
+> BriefStack helps teams with ai proposal builder.
+
+That's not a meta description.
+
+That's a broken template.
+
+---
+
+Look at this:
+
+> A focused feature that handles generated document management cleanly, without added complexity.
+
+That's placeholder garbage.
+
+No human would write that.
+
+---
+
+### The Big Insight
+
+The miner is doing its job.
+
+The prompt builder is not.
+
+In LaunchFrame terms:
+
+```
+Brain Dump
+     ↓
+Intent Miner
+     ↓
+ExtractedIntent
+     ↓
+Prompt Generator  ← weak link
+     ↓
+Output
+```
+
+The first 3 steps are surprisingly strong.
+
+The last step is where quality collapses.
+
+---
+
+### What I'd Fix Next
+
+Not AI.
+
+Not extraction.
+
+Not forms.
+
+Not OpenAI integration.
+
+I'd focus on:
+
+### 1. Headline Generation Engine
+
+Instead of:
+
+```js
+headline = businessName + goal
+```
+
+Generate:
+
+```js
+"Close Clients Faster"
+
+"Proposal-to-Signature in Minutes"
+
+"Your Client Onboarding Operating System"
+
+"Less Paperwork. More Projects."
+```
+
+A real headline generator.
+
+---
+
+### 2. Feature Description Generator
+
+Instead of:
+
+```js
+"A focused feature that handles X"
+```
+
+Generate descriptions based on feature type.
+
+Example:
+
+AI Proposal Builder
+
+> Create professional proposals in minutes using reusable templates, smart recommendations, and client-specific customization.
+
+Contract Generator
+
+> Generate legally structured agreements from project details without starting from scratch.
+
+CRM
+
+> Track leads, clients, projects, and communication history in one organized workspace.
+
+---
+
+### 3. SEO Generator
+
+Instead of:
+
+```txt
+BriefStack | Build an MVP web application that helps
+```
+
+Generate:
+
+```txt
+BriefStack | Proposal & Client Onboarding Software
+
+BriefStack | AI-Powered Proposal Builder for Freelancers
+
+BriefStack | Close Clients Faster
+```
+
+---
+
+### 4. About Section Generator
+
+Instead of repeating the goal:
+
+```txt
+We started BriefStack with one goal...
+```
+
+Generate a founder-style narrative:
+
+```txt
+BriefStack was created for service professionals who spend more time preparing documents than doing paid work.
+
+By combining proposals, onboarding, contracts, project briefs, and client tracking into one workflow, BriefStack helps teams move from lead to signed project faster.
+```
+
+---
+
+### My Overall Assessment
+
+If we score it:
+
+| Area                       | Score  |
+| -------------------------- | ------ |
+| Brain Dump Capture         | 9/10   |
+| Intent Understanding       | 8.5/10 |
+| Missing Info Detection     | 8/10   |
+| Form Population            | 9/10   |
+| Universal Prompt Structure | 8/10   |
+| Marketing Copy Generation  | 3/10   |
+| Hero Generation            | 2/10   |
+| SEO Generation             | 2/10   |
+| Feature Copy               | 4/10   |
+
+So the good news is:
+
+**You are much closer than you think.**
+
+The AI Miner appears to be working.
+
+The next major milestone isn't better extraction.
+
+It's building a **Copy Intelligence Layer** between:
+
+```txt
+ExtractedIntent
+        ↓
+Copy Intelligence Layer
+        ↓
+Hero
+Features
+About
+SEO
+CTA
+Prompt
+```
+
+That's where I'd spend the next sprint. The screenshots you posted are strong evidence that the miner is understanding the project correctly, but the content-generation templates need to become smarter. Also, the generated prompt in your test is still exhibiting the exact defects Claude identified: truncated headline, weak SEO title, repeated placeholder feature descriptions, and awkward About copy. Those are the highest-value fixes.
