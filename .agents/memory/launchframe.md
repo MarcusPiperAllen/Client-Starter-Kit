@@ -21,3 +21,7 @@ description: Durable design decisions behind the AI Intent Miner and Universal B
 - **The mined-result snapshot goes stale.** Clear it on any manual form edit, New Project, and Restore Draft so old suggestions/projectKind never leak into a freshly edited build prompt.
 
 - **One unified, kind-adaptive build prompt.** Always self-contained with gap-filling guidance (palette/type/styling/responsive/a11y); the software kind additionally specifies app requirements (features/data/auth) + verification. Driven by detected project kind, not just org type.
+
+- **The miner is a reasoning intake strategist, not a field extractor.** Its job is messy idea → complete, build-ready intent → strong starter build prompt for downstream coding agents. It must INFER typical features/pages/audience for the project type (not copy labels), use `notes` to carry assumptions + deferred defaults, and use `suggestions` to flag genuinely missing/uncertain items the human should confirm.
+  - **Why:** explicit product framing — this is a niche reasoning engine, a proof-of-concept, not a generic chatbot or a better regex.
+  - **Benchmark:** a messy dump describing LaunchFrame itself must yield intent complete enough to generate a prompt that could rebuild LaunchFrame. The behavior lives in the server SYSTEM_PROMPT (routes/intent.ts); tune it there.
