@@ -1,1 +1,2 @@
 - [LaunchFrame Intent Miner](launchframe.md) — stateless AI miner + rule-based fallback; mirrored FIELD_LABELS; kind-adaptive unified build prompt.
+- [LaunchFrame Copy Intelligence Layer](launchframe.md) — AI copy VALUES via /intent/copy; template fallback; anchor feature names to intent.services verbatim; 502 on incomplete copy.

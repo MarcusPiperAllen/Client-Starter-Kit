@@ -8,6 +8,11 @@
 
 export * from "./errorResponse";
 export * from "./extractedIntent";
+export * from "./generateCopyRequest";
+export * from "./generateCopyRequestProjectKind";
+export * from "./generatedCopy";
+export * from "./generatedCopySource";
+export * from "./generatedFeatureCopy";
 export * from "./healthStatus";
 export * from "./minedIntentResult";
 export * from "./minedIntentResultProjectKind";

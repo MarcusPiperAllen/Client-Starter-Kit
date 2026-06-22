@@ -67,3 +67,52 @@ export interface MinedIntentResult {
   suggestions: string[];
   source: MinedIntentResultSource;
 }
+
+export type GenerateCopyRequestProjectKind =
+  (typeof GenerateCopyRequestProjectKind)[keyof typeof GenerateCopyRequestProjectKind];
+
+export const GenerateCopyRequestProjectKind = {
+  website: "website",
+  software: "software",
+} as const;
+
+/**
+ * A structured project intent plus its detected kind, used to generate marketing copy. Stateless.
+
+ */
+export interface GenerateCopyRequest {
+  intent: ExtractedIntent;
+  projectKind: GenerateCopyRequestProjectKind;
+}
+
+/**
+ * A marketing description for a single service or feature.
+ */
+export interface GeneratedFeatureCopy {
+  /** The service/feature name, matching the input verbatim. */
+  name: string;
+  description: string;
+}
+
+export type GeneratedCopySource =
+  (typeof GeneratedCopySource)[keyof typeof GeneratedCopySource];
+
+export const GeneratedCopySource = {
+  ai: "ai",
+  fallback: "fallback",
+} as const;
+
+/**
+ * High-value marketing copy generated from a project intent. Each field replaces the corresponding deterministic template value in the output.
+
+ */
+export interface GeneratedCopy {
+  heroHeadline: string;
+  heroSubheadline: string;
+  about: string;
+  features: GeneratedFeatureCopy[];
+  seoTitle: string;
+  metaDescription: string;
+  ctaCopy: string;
+  source: GeneratedCopySource;
+}

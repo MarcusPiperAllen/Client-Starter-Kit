@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Copy, ArrowLeft, Loader2, Frame, Save, RotateCcw, CheckCircle2, AlertCircle, PlusCircle, Sparkles, Wand2, ChevronDown, Lightbulb, ListChecks } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useMineIntent } from "@workspace/api-client-react";
+import { useMineIntent, useGenerateCopy, type GeneratedCopy } from "@workspace/api-client-react";
 import {
   type FormData,
   type ExtractedIntent,
@@ -202,8 +202,12 @@ export default function Home() {
   const [brainDump, setBrainDump] = useState("");
   const [showBrainDump, setShowBrainDump] = useState(true);
   const [mineMeta, setMineMeta] = useState<MineMeta | null>(null);
+  const [aiCopy, setAiCopy] = useState<GeneratedCopy | null>(null);
+  const [copySource, setCopySource] = useState<"ai" | "basic" | null>(null);
   const mineMutation = useMineIntent();
+  const copyMutation = useGenerateCopy();
   const isMining = mineMutation.isPending;
+  const isWritingCopy = copyMutation.isPending;
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFirstRender = useRef(true);
 
@@ -350,6 +354,40 @@ export default function Home() {
     });
   };
 
+  // Copy Intelligence Layer: generate marketing copy from the structured
+  // intent. On any failure returns null so the output falls back to the
+  // deterministic template copy (mirrors the miner's AI-vs-fallback pattern).
+  const runCopy = async (
+    target: ExtractedIntent,
+    kind: ProjectKind,
+  ): Promise<{ copy: GeneratedCopy | null; source: "ai" | "basic" }> => {
+    try {
+      const res = await copyMutation.mutateAsync({ data: { intent: target, projectKind: kind } });
+      return { copy: res, source: "ai" };
+    } catch {
+      return { copy: null, source: "basic" };
+    }
+  };
+
+  // Shared transition into the output view: write the AI copy (or fall back to
+  // templates), record the source, then render the generated prompt.
+  const enterOutput = async (target: ExtractedIntent, kind: ProjectKind) => {
+    const { copy, source } = await runCopy(target, kind);
+    setAiCopy(copy);
+    setCopySource(source);
+    setIntent(target);
+    setIsOutputMode(true);
+    try { localStorage.removeItem(AUTOSAVE_KEY); } catch { /* ignore */ }
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    if (source === "basic") {
+      toast({
+        title: "Used basic copy",
+        description: "The AI copywriter was unavailable, so we generated copy from built-in templates.",
+        duration: 3500,
+      });
+    }
+  };
+
   // Secondary brain-dump path: mine and jump straight to the generated prompt,
   // while still populating the form so "Back to Edit" works.
   const handleAutoBuild = async () => {
@@ -363,13 +401,10 @@ export default function Home() {
     setMineMeta(meta);
     // Build output from the full merged form so any pre-existing manual entries
     // are preserved, not just the mined subset.
-    setIntent(formDataToIntent(merged));
-    setIsOutputMode(true);
-    try { localStorage.removeItem(AUTOSAVE_KEY); } catch { /* ignore */ }
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    await enterOutput(formDataToIntent(merged), meta.projectKind);
   };
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     const errors = validate(formData);
     if (Object.keys(errors).length > 0) {
       setValidationErrors(errors);
@@ -378,13 +413,9 @@ export default function Home() {
       return;
     }
     setIsGenerating(true);
-    setTimeout(() => {
-      setIsGenerating(false);
-      setIntent(formDataToIntent(formData));
-      setIsOutputMode(true);
-      try { localStorage.removeItem(AUTOSAVE_KEY); } catch { /* ignore */ }
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }, 600);
+    const target = formDataToIntent(formData);
+    await enterOutput(target, mineMeta?.projectKind ?? deriveProjectKind(target));
+    setIsGenerating(false);
   };
 
   const handleBackToForm = () => {
@@ -407,6 +438,8 @@ export default function Home() {
         intent={intent}
         projectKind={mineMeta?.projectKind ?? deriveProjectKind(intent)}
         suggestions={mineMeta?.suggestions ?? []}
+        copy={aiCopy}
+        copySource={copySource}
         onBack={handleBackToForm}
         onCopy={handleCopy}
       />
@@ -465,18 +498,21 @@ export default function Home() {
                 Tip: lines like <span className="font-medium text-foreground/80">Business:</span>, <span className="font-medium text-foreground/80">Goal:</span>, or <span className="font-medium text-foreground/80">Services:</span> are detected automatically. Free-form notes work too.
               </p>
               <div className="flex flex-col sm:flex-row gap-3">
-                <Button className="flex-1" onClick={handleBrainDumpFill} disabled={isMining || !brainDump.trim()} data-testid="button-fill-from-notes">
+                <Button className="flex-1" onClick={handleBrainDumpFill} disabled={isMining || isWritingCopy || !brainDump.trim()} data-testid="button-fill-from-notes">
                   {isMining ? (
                     <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Analyzing…</>
                   ) : (
                     <><Wand2 className="w-4 h-4 mr-2" />Review &amp; fill form</>
                   )}
                 </Button>
-                <Button variant="secondary" className="flex-1" onClick={handleAutoBuild} disabled={isMining || !brainDump.trim()} data-testid="button-auto-build">
-                  <Sparkles className="w-4 h-4 mr-2" />
-                  Auto-build prompt
+                <Button variant="secondary" className="flex-1" onClick={handleAutoBuild} disabled={isMining || isWritingCopy || !brainDump.trim()} data-testid="button-auto-build">
+                  {isWritingCopy ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Writing copy…</>
+                  ) : (
+                    <><Sparkles className="w-4 h-4 mr-2" />Auto-build prompt</>
+                  )}
                 </Button>
-                <Button variant="outline" onClick={() => setBrainDump("")} disabled={!brainDump || isMining} data-testid="button-clear-brain-dump">
+                <Button variant="outline" onClick={() => setBrainDump("")} disabled={!brainDump || isMining || isWritingCopy} data-testid="button-clear-brain-dump">
                   Clear
                 </Button>
               </div>
@@ -921,15 +957,28 @@ function OutputView({
   intent,
   projectKind = "website",
   suggestions = [],
+  copy = null,
+  copySource = null,
   onBack,
   onCopy,
 }: {
   intent: ExtractedIntent;
   projectKind?: ProjectKind;
   suggestions?: string[];
+  copy?: GeneratedCopy | null;
+  copySource?: "ai" | "basic" | null;
   onBack: () => void;
   onCopy: (text: string, title: string) => void;
 }) {
+  // AI copy lookup for per-feature descriptions, keyed by lowercased name so
+  // describeService can prefer the generated copy and fall back to templates.
+  const aiFeatureMap = new Map<string, string>();
+  if (copy?.features) {
+    for (const f of copy.features) {
+      const key = f.name.trim().toLowerCase();
+      if (key && f.description.trim()) aiFeatureMap.set(key, f.description.trim());
+    }
+  }
   const {
     projectName,
     businessName,
@@ -1131,6 +1180,8 @@ function OutputView({
   // --- Describe a single service/feature/program uniquely ---
   // Org-type-aware: each block handles the vocabulary for its category
   const describeService = (name: string): string => {
+    const ai = aiFeatureMap.get(name.trim().toLowerCase());
+    if (ai) return ai;
     const n = name.toLowerCase();
 
     // SaaS / App features
@@ -1520,8 +1571,8 @@ function OutputView({
     return byTone[toneDisplay] ?? `Professional ${offeringPhrase}${locationPhrase}. ${ctaUpper} today.`;
   };
 
-  const headline = getHeadline();
-  const subheadline = getSubheadline();
+  const headline = copy?.heroHeadline.trim() || getHeadline();
+  const subheadline = copy?.heroSubheadline.trim() || getSubheadline();
 
   // --- About section ---
   const getAbout = (): string => {
@@ -1771,8 +1822,8 @@ function OutputView({
 
   // --- Cached generator outputs — each computed once, reused in template strings and output cards ---
   const isClassicStack = techStack === "html-css" || techStack === "html-css-js" || !techStack;
-  const aboutDraft = getAbout();
-  const ctaDraft = getCtaDraft();
+  const aboutDraft = copy?.about.trim() || getAbout();
+  const ctaDraft = copy?.ctaCopy.trim() || getCtaDraft();
   const techStackInstructions = getTechStackInstructions();
   const servicesDraft = getServicesDraft();
   const contentChecklist = getContentChecklist();
@@ -1788,11 +1839,11 @@ function OutputView({
   });
 
   // --- SEO title and meta description (reused in getSeoPack and htmlDraft head) ---
-  const seoTitle = (() => {
+  const seoTitle = copy?.seoTitle.trim() || (() => {
     const goalPart = cleanGoal ? summarizeGoal(cleanGoal) : coreService ? cap(coreService) : "Quality Service";
     return location ? `${bizName} | ${goalPart} — ${location}` : `${bizName} | ${goalPart}`;
   })();
-  const seoMetaDesc = (() => {
+  const seoMetaDesc = copy?.metaDescription.trim() || (() => {
     const audLower = audienceDisplay.charAt(0).toLowerCase() + audienceDisplay.slice(1);
     const offering = coreService ? fixProperNouns(coreService.toLowerCase()) : cleanGoal ? cleanGoal : "quality services";
     const ctaPhrase = cta ? ` ${cap(cta)} today.` : "";
@@ -2359,6 +2410,14 @@ footer a:hover { color: white; }
           <div>
             <h1 className="text-3xl font-bold">Your Build Prompt</h1>
             <p className="text-muted-foreground mt-1">Copy the prompt below into any AI coding agent. Supporting reference is included beneath it.</p>
+            {copySource && (
+              <span
+                className={`mt-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${copySource === "ai" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}
+                data-testid="badge-copy-source"
+              >
+                {copySource === "ai" ? "AI-written copy" : "Basic copy (AI unavailable)"}
+              </span>
+            )}
           </div>
           <Button variant="outline" onClick={onBack} data-testid="button-back">
             <ArrowLeft className="w-4 h-4 mr-2" />

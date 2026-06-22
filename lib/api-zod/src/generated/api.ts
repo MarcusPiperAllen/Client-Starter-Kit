@@ -57,3 +57,62 @@ export const MineIntentResponse = zod.object({
   suggestions: zod.array(zod.string()),
   source: zod.enum(["ai", "fallback"]),
 });
+
+/**
+ * Takes a structured ExtractedIntent plus the detected project kind and returns high-value marketing copy: hero headline and subheadline, an About section, per-feature descriptions, an SEO title and meta description, and CTA copy. The copy is constrained to the project kind and the selected tone/CTA. Stateless. On AI failure the client falls back to its built-in template copy.
+
+ * @summary Generate marketing copy from a structured project intent
+ */
+export const GenerateCopyBody = zod
+  .object({
+    intent: zod
+      .object({
+        projectName: zod.string(),
+        businessName: zod.string(),
+        founderName: zod.string(),
+        organizationType: zod.string(),
+        primaryGoal: zod.string(),
+        audience: zod.string(),
+        services: zod.array(zod.string()),
+        pages: zod.array(zod.string()),
+        tone: zod.string(),
+        callToAction: zod.string(),
+        technologyStack: zod.string(),
+        contactEmail: zod.string(),
+        contactPhone: zod.string(),
+        notes: zod.string(),
+      })
+      .describe(
+        "Canonical project intent. Select fields (organizationType, tone, callToAction, technologyStack) are constrained to the form's allowed values or an empty string when unknown.\n",
+      ),
+    projectKind: zod.enum(["website", "software"]),
+  })
+  .describe(
+    "A structured project intent plus its detected kind, used to generate marketing copy. Stateless.\n",
+  );
+
+export const GenerateCopyResponse = zod
+  .object({
+    heroHeadline: zod.string(),
+    heroSubheadline: zod.string(),
+    about: zod.string(),
+    features: zod.array(
+      zod
+        .object({
+          name: zod
+            .string()
+            .describe(
+              "The service\/feature name, matching the input verbatim.",
+            ),
+          description: zod.string(),
+        })
+        .describe("A marketing description for a single service or feature."),
+    ),
+    seoTitle: zod.string(),
+    metaDescription: zod.string(),
+    ctaCopy: zod.string(),
+    source: zod.enum(["ai", "fallback"]),
+  })
+  .describe(
+    "High-value marketing copy generated from a project intent. Each field replaces the corresponding deterministic template value in the output.\n",
+  );

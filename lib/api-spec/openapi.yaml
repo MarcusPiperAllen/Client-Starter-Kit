@@ -61,6 +61,43 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /intent/copy:
+    post:
+      operationId: generateCopy
+      tags: [intent]
+      summary: Generate marketing copy from a structured project intent
+      description: >
+        Takes a structured ExtractedIntent plus the detected project kind and
+        returns high-value marketing copy: hero headline and subheadline, an
+        About section, per-feature descriptions, an SEO title and meta
+        description, and CTA copy. The copy is constrained to the project kind
+        and the selected tone/CTA. Stateless. On AI failure the client falls
+        back to its built-in template copy.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateCopyRequest"
+      responses:
+        "200":
+          description: Generated copy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeneratedCopy"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: The AI copywriter is unavailable or returned an invalid response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
     HealthStatus:
@@ -170,5 +207,65 @@ components:
         - filledFields
         - missingFields
         - suggestions
+        - source
+    GenerateCopyRequest:
+      type: object
+      description: >
+        A structured project intent plus its detected kind, used to generate
+        marketing copy. Stateless.
+      properties:
+        intent:
+          $ref: "#/components/schemas/ExtractedIntent"
+        projectKind:
+          type: string
+          enum: [website, software]
+      required:
+        - intent
+        - projectKind
+    GeneratedFeatureCopy:
+      type: object
+      description: A marketing description for a single service or feature.
+      properties:
+        name:
+          type: string
+          description: The service/feature name, matching the input verbatim.
+        description:
+          type: string
+      required:
+        - name
+        - description
+    GeneratedCopy:
+      type: object
+      description: >
+        High-value marketing copy generated from a project intent. Each field
+        replaces the corresponding deterministic template value in the output.
+      properties:
+        heroHeadline:
+          type: string
+        heroSubheadline:
+          type: string
+        about:
+          type: string
+        features:
+          type: array
+          items:
+            $ref: "#/components/schemas/GeneratedFeatureCopy"
+        seoTitle:
+          type: string
+        metaDescription:
+          type: string
+        ctaCopy:
+          type: string
+        source:
+          type: string
+          enum: [ai, fallback]
+      required:
+        - heroHeadline
+        - heroSubheadline
+        - about
+        - features
+        - seoTitle
+        - metaDescription
+        - ctaCopy
         - source
 

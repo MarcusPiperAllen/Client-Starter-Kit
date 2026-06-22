@@ -3,8 +3,11 @@ import { getOpenAI } from "@workspace/integrations-openai-ai-server";
 import {
   MineIntentBody,
   MineIntentResponse,
+  GenerateCopyBody,
+  GenerateCopyResponse,
   type ExtractedIntent,
   type MinedIntentResult,
+  type GeneratedCopy,
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -282,6 +285,192 @@ router.post("/intent/mine", async (req, res) => {
 
   // Validate our own response against the generated contract before sending.
   const validated = MineIntentResponse.parse(result);
+  res.json(validated);
+});
+
+// ---------------------------------------------------------------------------
+// Copy Intelligence Layer: turn a structured intent into polished marketing
+// copy. The deterministic template engine on the client remains the fallback,
+// so on any AI failure we return 502 and the client uses its templates.
+// ---------------------------------------------------------------------------
+
+const COPY_SYSTEM_PROMPT = `You are LaunchFrame's Copy Intelligence Layer: a senior brand and conversion copywriter. You are given a STRUCTURED project brief (already extracted and validated) and must write the high-value marketing copy for the project's landing page. You are not a chatbot and not a summarizer — you write copy a real founder would be proud to ship.
+
+You will receive: business name, founder name, organization type, project kind (website vs software/app), primary goal, target audience, brand tone, call to action, the list of services/features, and any notes. Write copy that reads as if it was written specifically for THIS business — concrete, benefit-led, and human.
+
+Write the following:
+- heroHeadline: a short, punchy hook (roughly 4-10 words). It must be a real headline that sells an outcome or promise — NOT a truncated restatement of the goal, and NOT just "Business — goal". You may include the business name when it reads naturally, but prioritize a compelling hook over a label.
+- heroSubheadline: one or two sentences (roughly 12-30 words) that expand on the headline, name the audience or the value, and lead naturally toward the call to action. No fragments.
+- about: a founder-voice About section of 2-4 sentences. For a personal brand, write in first person ("I"); otherwise write in the brand's voice ("we"). Convey why the business exists and who it serves. Do not paste the goal verbatim.
+- features: one entry per provided service/feature, in the same order. "name" MUST match the provided service text verbatim. "description" is ONE specific, benefit-led sentence about that feature — each description must be distinct (never a generic placeholder like "a focused feature that handles X cleanly").
+- seoTitle: a clean, search-friendly page title, ideally under 60 characters, that includes the business name and the core value. Not a chopped sentence fragment.
+- metaDescription: a compelling meta description under 155 characters that describes the offering and invites action. Complete sentences, no truncation.
+- ctaCopy: 1-2 sentences of call-to-action section copy that motivates the reader to take the selected action.
+
+Rules:
+- Match the requested brand tone exactly. Adapt vocabulary to website vs software/app (e.g. "your team", "workflow", "platform" for software; service/community language for a website).
+- Be specific and credible. Do not invent facts, statistics, prices, names, or claims that were not provided or strongly implied.
+- Plain text only. No markdown, no surrounding quotation marks, no emoji, no double-quote characters inside the copy.
+- If a field has no basis (e.g. no services were provided), still return a sensible, on-brand value; for features, return an empty array only when no services were provided.`;
+
+const COPY_RESPONSE_JSON_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    heroHeadline: { type: "string" },
+    heroSubheadline: { type: "string" },
+    about: { type: "string" },
+    features: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          name: { type: "string" },
+          description: { type: "string" },
+        },
+        required: ["name", "description"],
+      },
+    },
+    seoTitle: { type: "string" },
+    metaDescription: { type: "string" },
+    ctaCopy: { type: "string" },
+  },
+  required: [
+    "heroHeadline",
+    "heroSubheadline",
+    "about",
+    "features",
+    "seoTitle",
+    "metaDescription",
+    "ctaCopy",
+  ],
+} as const;
+
+// Render the structured intent into a compact, readable brief for the model.
+function intentToBrief(intent: ExtractedIntent, projectKind: string): string {
+  const lines: string[] = [];
+  const push = (label: string, value: string) => {
+    if (value.trim()) lines.push(`${label}: ${value.trim()}`);
+  };
+  push("Business name", intent.businessName);
+  push("Founder name", intent.founderName);
+  push("Organization type", intent.organizationType);
+  lines.push(`Project kind: ${projectKind}`);
+  push("Primary goal", intent.primaryGoal);
+  push("Target audience", intent.audience);
+  push("Brand tone", intent.tone);
+  push("Call to action", intent.callToAction);
+  if (intent.services.length > 0)
+    lines.push(`Services/features (write one description each, names verbatim): ${intent.services.join("; ")}`);
+  push("Notes", intent.notes);
+  return lines.join("\n");
+}
+
+// Strip characters that would break HTML attributes / read as model noise, and
+// collapse whitespace. Keeps the copy plain-text and scaffold-safe.
+const sanitizeCopy = (v: unknown): string =>
+  asString(v).replace(/["“”]/g, "'").replace(/\s+/g, " ").trim();
+
+router.post("/intent/copy", async (req, res) => {
+  const parsed = GenerateCopyBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "A valid 'intent' and 'projectKind' are required." });
+    return;
+  }
+
+  const { intent, projectKind } = parsed.data;
+
+  let completion;
+  try {
+    completion = await getOpenAI().chat.completions.create({
+      model: "gpt-5.4",
+      max_completion_tokens: 8192,
+      messages: [
+        { role: "system", content: COPY_SYSTEM_PROMPT },
+        { role: "user", content: intentToBrief(intent, projectKind) },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "generated_copy",
+          strict: true,
+          schema: COPY_RESPONSE_JSON_SCHEMA,
+        },
+      },
+    });
+  } catch (err) {
+    req.log.error({ err }, "copy generation: AI request failed");
+    res.status(502).json({ error: "The AI copywriter is currently unavailable." });
+    return;
+  }
+
+  const content = completion.choices[0]?.message?.content;
+  if (!content) {
+    req.log.error("copy generation: empty AI response");
+    res.status(502).json({ error: "The AI copywriter returned an empty response." });
+    return;
+  }
+
+  let rawResult: Record<string, unknown>;
+  try {
+    rawResult = JSON.parse(content) as Record<string, unknown>;
+  } catch (err) {
+    req.log.error({ err }, "copy generation: failed to parse AI JSON");
+    res.status(502).json({ error: "The AI copywriter returned malformed output." });
+    return;
+  }
+
+  // Anchor feature names to the input services verbatim. The model may rewrite
+  // or reorder names; the frontend maps AI descriptions by exact (lowercased)
+  // service name, so we never trust model-supplied names. We pair each input
+  // service with the model's description by name match, falling back to index.
+  const rawFeatures = Array.isArray(rawResult.features) ? rawResult.features : [];
+  const aiFeatures = rawFeatures.map((f) => {
+    const obj = (f ?? {}) as Record<string, unknown>;
+    return { name: asString(obj.name), description: sanitizeCopy(obj.description) };
+  });
+  const byName = new Map<string, string>();
+  aiFeatures.forEach((f) => {
+    if (f.name && f.description) byName.set(f.name.toLowerCase(), f.description);
+  });
+  const features = intent.services
+    .map((service, i) => {
+      const description =
+        byName.get(service.toLowerCase()) || aiFeatures[i]?.description || "";
+      return { name: service, description };
+    })
+    .filter((f) => f.name && f.description);
+
+  const result: GeneratedCopy = {
+    heroHeadline: sanitizeCopy(rawResult.heroHeadline),
+    heroSubheadline: sanitizeCopy(rawResult.heroSubheadline),
+    about: sanitizeCopy(rawResult.about),
+    features,
+    seoTitle: sanitizeCopy(rawResult.seoTitle),
+    metaDescription: sanitizeCopy(rawResult.metaDescription),
+    ctaCopy: sanitizeCopy(rawResult.ctaCopy),
+    source: "ai",
+  };
+
+  // If the model returned blanks for any high-value copy field, treat it as a
+  // failure so the client falls back to its template copy rather than rendering
+  // low-value or empty AI copy.
+  if (
+    !result.heroHeadline ||
+    !result.heroSubheadline ||
+    !result.about ||
+    !result.ctaCopy ||
+    !result.seoTitle ||
+    !result.metaDescription
+  ) {
+    req.log.error("copy generation: AI response missing essential copy");
+    res.status(502).json({ error: "The AI copywriter returned incomplete copy." });
+    return;
+  }
+
+  // Validate our own response against the generated contract before sending.
+  const validated = GenerateCopyResponse.parse(result);
   res.json(validated);
 });
 

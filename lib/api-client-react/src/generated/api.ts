@@ -18,6 +18,8 @@ import type {
 
 import type {
   ErrorResponse,
+  GenerateCopyRequest,
+  GeneratedCopy,
   HealthStatus,
   MineIntentRequest,
   MinedIntentResult,
@@ -194,4 +196,92 @@ export const useMineIntent = <
   TContext
 > => {
   return useMutation(getMineIntentMutationOptions(options));
+};
+
+/**
+ * Takes a structured ExtractedIntent plus the detected project kind and returns high-value marketing copy: hero headline and subheadline, an About section, per-feature descriptions, an SEO title and meta description, and CTA copy. The copy is constrained to the project kind and the selected tone/CTA. Stateless. On AI failure the client falls back to its built-in template copy.
+
+ * @summary Generate marketing copy from a structured project intent
+ */
+export const getGenerateCopyUrl = () => {
+  return `/api/intent/copy`;
+};
+
+export const generateCopy = async (
+  generateCopyRequest: GenerateCopyRequest,
+  options?: RequestInit,
+): Promise<GeneratedCopy> => {
+  return customFetch<GeneratedCopy>(getGenerateCopyUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(generateCopyRequest),
+  });
+};
+
+export const getGenerateCopyMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateCopy>>,
+    TError,
+    { data: BodyType<GenerateCopyRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof generateCopy>>,
+  TError,
+  { data: BodyType<GenerateCopyRequest> },
+  TContext
+> => {
+  const mutationKey = ["generateCopy"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof generateCopy>>,
+    { data: BodyType<GenerateCopyRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return generateCopy(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type GenerateCopyMutationResult = NonNullable<
+  Awaited<ReturnType<typeof generateCopy>>
+>;
+export type GenerateCopyMutationBody = BodyType<GenerateCopyRequest>;
+export type GenerateCopyMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Generate marketing copy from a structured project intent
+ */
+export const useGenerateCopy = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateCopy>>,
+    TError,
+    { data: BodyType<GenerateCopyRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof generateCopy>>,
+  TError,
+  { data: BodyType<GenerateCopyRequest> },
+  TContext
+> => {
+  return useMutation(getGenerateCopyMutationOptions(options));
 };
