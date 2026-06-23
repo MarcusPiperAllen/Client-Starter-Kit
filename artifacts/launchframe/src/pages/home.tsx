@@ -353,6 +353,10 @@ export default function Home() {
   const resolveQuestionsMutation = useResolveQuestions();
   const [resolutionQuestions, setResolutionQuestions] = useState<ResolutionQuestion[]>([]);
   const [answeredQuestionIds, setAnsweredQuestionIds] = useState<Set<string>>(new Set());
+  // Preserves toneNuance and callToActionCustom from the last mine run so they
+  // survive the FormData round-trip and reach OutputView correctly.
+  const [lastMinedToneNuance, setLastMinedToneNuance] = useState("");
+  const [lastMinedCtaCustom, setLastMinedCtaCustom] = useState("");
   const isMining = mineMutation.isPending;
   const isWritingCopy = copyMutation.isPending;
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -451,6 +455,8 @@ export default function Home() {
     try { localStorage.removeItem(AUTOSAVE_KEY); } catch { /* ignore */ }
     try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
     setDraftExists(false);
+    setLastMinedToneNuance("");
+    setLastMinedCtaCustom("");
   };
 
   const handleQuestionAnswer = (question: ResolutionQuestion, value: string | string[]) => {
@@ -505,6 +511,10 @@ export default function Home() {
     for (const k of filledKeys) merged[k] = parsed[k];
     setFormData(merged);
     setValidationErrors({});
+    // toneNuance and callToActionCustom live only on ExtractedIntent, not FormData.
+    // Stash them so handleGenerate and handleAutoBuild can merge them back in.
+    setLastMinedToneNuance(intent.toneNuance);
+    setLastMinedCtaCustom(intent.callToActionCustom);
     return { merged, filledCount: filledKeys.length };
   };
 
@@ -582,7 +592,13 @@ export default function Home() {
     setMineMeta(meta);
     // Build output from the full merged form so any pre-existing manual entries
     // are preserved, not just the mined subset.
-    await enterOutput(formDataToIntent(merged), meta.projectKind);
+    const base = formDataToIntent(merged);
+    const target: ExtractedIntent = {
+      ...base,
+      toneNuance: mined.toneNuance || base.toneNuance,
+      callToActionCustom: mined.callToActionCustom || base.callToActionCustom,
+    };
+    await enterOutput(target, meta.projectKind);
   };
 
   const handleGenerate = async () => {
@@ -594,7 +610,12 @@ export default function Home() {
       return;
     }
     setIsGenerating(true);
-    const target = formDataToIntent(formData);
+    const base = formDataToIntent(formData);
+    const target: ExtractedIntent = {
+      ...base,
+      toneNuance: lastMinedToneNuance || base.toneNuance,
+      callToActionCustom: lastMinedCtaCustom || base.callToActionCustom,
+    };
     await enterOutput(target, mineMeta?.projectKind ?? deriveProjectKind(target));
     setIsGenerating(false);
   };
@@ -2402,6 +2423,7 @@ ${extraSections.length > 0 ? extraSections.map(item => `
     --text: ${cm.text};
     --muted: ${cm.muted};
     --card-bg: ${cm.darkBg ? "#1e293b" : "#ffffff"};
+    --border: ${cm.darkBg ? "#334155" : "#e2e8f0"};
     --font: ${font.family};
 }
 
@@ -2560,7 +2582,7 @@ h2 {
 
 .service-card {
     background: var(--card-bg);
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--border);
     padding: 2rem;
     border-radius: 0.75rem;
     text-align: center;
@@ -2621,7 +2643,7 @@ footer a:hover { color: white; }
         left: 0;
         right: 0;
         background: ${headerBg};
-        border-top: 1px solid #e2e8f0;
+        border-top: 1px solid var(--border);
         box-shadow: 0 4px 12px rgba(0,0,0,0.1);
     }
 
@@ -2630,7 +2652,7 @@ footer a:hover { color: white; }
     .nav-links li a {
         display: block;
         padding: 1rem 1.5rem;
-        border-bottom: 1px solid #f1f5f9;
+        border-bottom: 1px solid ${cm.darkBg ? "#1e293b" : "#f1f5f9"};
     }
 
     .hero { padding: 4.5rem 0; }
