@@ -98,6 +98,35 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /intent/questions:
+    post:
+      operationId: resolveQuestions
+      tags: [intent]
+      summary: Generate ranked clarifying questions from a mined intent
+      description: >
+        Returns up to 3 ranked questions that surface the highest-impact gaps
+        in a partially-filled intent. Uses AI when available; falls back to a
+        deterministic question set derived from the missing fields. Always
+        returns 200 — the server handles AI failure internally.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResolveQuestionsRequest"
+      responses:
+        "200":
+          description: Up to 3 ranked questions. source is "ai" or "fallback".
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResolveQuestionsResult"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
     HealthStatus:
@@ -267,5 +296,78 @@ components:
         - seoTitle
         - metaDescription
         - ctaCopy
+        - source
+    ResolutionQuestion:
+      type: object
+      description: A ranked clarifying question derived from gaps in a mined intent.
+      properties:
+        id:
+          type: string
+          description: Stable identifier, e.g. "q_organizationType"
+        questionText:
+          type: string
+        rationale:
+          type: string
+          description: One sentence explaining why this gap matters for the build.
+        answerType:
+          type: string
+          enum: [boolean, single-select, multi-select, short-text]
+        options:
+          type: array
+          items:
+            type: string
+          description: >
+            Answer choices for boolean, single-select, and multi-select types.
+            Empty array for short-text questions.
+        targetFields:
+          type: array
+          items:
+            type: string
+          description: Keys of ExtractedIntent to update when this question is answered.
+        priority:
+          type: string
+          enum: [architectural, content]
+      required:
+        - id
+        - questionText
+        - rationale
+        - answerType
+        - options
+        - targetFields
+        - priority
+    ResolveQuestionsRequest:
+      type: object
+      properties:
+        intent:
+          $ref: "#/components/schemas/ExtractedIntent"
+        projectKind:
+          type: string
+          enum: [software, website]
+        suggestions:
+          type: array
+          items:
+            type: string
+        missingFields:
+          type: array
+          items:
+            type: string
+      required:
+        - intent
+        - projectKind
+        - suggestions
+        - missingFields
+    ResolveQuestionsResult:
+      type: object
+      description: Up to 3 ranked clarifying questions and their source.
+      properties:
+        questions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ResolutionQuestion"
+        source:
+          type: string
+          enum: [ai, fallback]
+      required:
+        - questions
         - source
 

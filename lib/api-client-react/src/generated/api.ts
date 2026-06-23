@@ -23,6 +23,8 @@ import type {
   HealthStatus,
   MineIntentRequest,
   MinedIntentResult,
+  ResolveQuestionsRequest,
+  ResolveQuestionsResult,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -284,4 +286,92 @@ export const useGenerateCopy = <
   TContext
 > => {
   return useMutation(getGenerateCopyMutationOptions(options));
+};
+
+/**
+ * Returns up to 3 ranked questions that surface the highest-impact gaps in a partially-filled intent. Uses AI when available; falls back to a deterministic question set derived from the missing fields. Always returns 200 — the server handles AI failure internally.
+
+ * @summary Generate ranked clarifying questions from a mined intent
+ */
+export const getResolveQuestionsUrl = () => {
+  return `/api/intent/questions`;
+};
+
+export const resolveQuestions = async (
+  resolveQuestionsRequest: ResolveQuestionsRequest,
+  options?: RequestInit,
+): Promise<ResolveQuestionsResult> => {
+  return customFetch<ResolveQuestionsResult>(getResolveQuestionsUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(resolveQuestionsRequest),
+  });
+};
+
+export const getResolveQuestionsMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resolveQuestions>>,
+    TError,
+    { data: BodyType<ResolveQuestionsRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof resolveQuestions>>,
+  TError,
+  { data: BodyType<ResolveQuestionsRequest> },
+  TContext
+> => {
+  const mutationKey = ["resolveQuestions"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof resolveQuestions>>,
+    { data: BodyType<ResolveQuestionsRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return resolveQuestions(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ResolveQuestionsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof resolveQuestions>>
+>;
+export type ResolveQuestionsMutationBody = BodyType<ResolveQuestionsRequest>;
+export type ResolveQuestionsMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Generate ranked clarifying questions from a mined intent
+ */
+export const useResolveQuestions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resolveQuestions>>,
+    TError,
+    { data: BodyType<ResolveQuestionsRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof resolveQuestions>>,
+  TError,
+  { data: BodyType<ResolveQuestionsRequest> },
+  TContext
+> => {
+  return useMutation(getResolveQuestionsMutationOptions(options));
 };

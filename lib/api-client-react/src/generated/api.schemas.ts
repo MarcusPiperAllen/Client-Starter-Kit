@@ -116,3 +116,70 @@ export interface GeneratedCopy {
   ctaCopy: string;
   source: GeneratedCopySource;
 }
+
+export type ResolutionQuestionAnswerType =
+  (typeof ResolutionQuestionAnswerType)[keyof typeof ResolutionQuestionAnswerType];
+
+export const ResolutionQuestionAnswerType = {
+  boolean: "boolean",
+  "single-select": "single-select",
+  "multi-select": "multi-select",
+  "short-text": "short-text",
+} as const;
+
+export type ResolutionQuestionPriority =
+  (typeof ResolutionQuestionPriority)[keyof typeof ResolutionQuestionPriority];
+
+export const ResolutionQuestionPriority = {
+  architectural: "architectural",
+  content: "content",
+} as const;
+
+/**
+ * A ranked clarifying question derived from gaps in a mined intent.
+ */
+export interface ResolutionQuestion {
+  /** Stable identifier, e.g. "q_organizationType" */
+  id: string;
+  questionText: string;
+  /** One sentence explaining why this gap matters for the build. */
+  rationale: string;
+  answerType: ResolutionQuestionAnswerType;
+  /** Answer choices for boolean, single-select, and multi-select types. Empty array for short-text questions.
+   */
+  options: string[];
+  /** Keys of ExtractedIntent to update when this question is answered. */
+  targetFields: string[];
+  priority: ResolutionQuestionPriority;
+}
+
+export type ResolveQuestionsRequestProjectKind =
+  (typeof ResolveQuestionsRequestProjectKind)[keyof typeof ResolveQuestionsRequestProjectKind];
+
+export const ResolveQuestionsRequestProjectKind = {
+  software: "software",
+  website: "website",
+} as const;
+
+export interface ResolveQuestionsRequest {
+  intent: ExtractedIntent;
+  projectKind: ResolveQuestionsRequestProjectKind;
+  suggestions: string[];
+  missingFields: string[];
+}
+
+export type ResolveQuestionsResultSource =
+  (typeof ResolveQuestionsResultSource)[keyof typeof ResolveQuestionsResultSource];
+
+export const ResolveQuestionsResultSource = {
+  ai: "ai",
+  fallback: "fallback",
+} as const;
+
+/**
+ * Up to 3 ranked clarifying questions and their source.
+ */
+export interface ResolveQuestionsResult {
+  questions: ResolutionQuestion[];
+  source: ResolveQuestionsResultSource;
+}

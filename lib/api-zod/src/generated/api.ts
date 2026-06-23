@@ -116,3 +116,74 @@ export const GenerateCopyResponse = zod
   .describe(
     "High-value marketing copy generated from a project intent. Each field replaces the corresponding deterministic template value in the output.\n",
   );
+
+/**
+ * Returns up to 3 ranked questions that surface the highest-impact gaps in a partially-filled intent. Uses AI when available; falls back to a deterministic question set derived from the missing fields. Always returns 200 — the server handles AI failure internally.
+
+ * @summary Generate ranked clarifying questions from a mined intent
+ */
+export const ResolveQuestionsBody = zod.object({
+  intent: zod
+    .object({
+      projectName: zod.string(),
+      businessName: zod.string(),
+      founderName: zod.string(),
+      organizationType: zod.string(),
+      primaryGoal: zod.string(),
+      audience: zod.string(),
+      services: zod.array(zod.string()),
+      pages: zod.array(zod.string()),
+      tone: zod.string(),
+      callToAction: zod.string(),
+      technologyStack: zod.string(),
+      contactEmail: zod.string(),
+      contactPhone: zod.string(),
+      notes: zod.string(),
+    })
+    .describe(
+      "Canonical project intent. Select fields (organizationType, tone, callToAction, technologyStack) are constrained to the form's allowed values or an empty string when unknown.\n",
+    ),
+  projectKind: zod.enum(["software", "website"]),
+  suggestions: zod.array(zod.string()),
+  missingFields: zod.array(zod.string()),
+});
+
+export const ResolveQuestionsResponse = zod
+  .object({
+    questions: zod.array(
+      zod
+        .object({
+          id: zod
+            .string()
+            .describe('Stable identifier, e.g. \"q_organizationType\"'),
+          questionText: zod.string(),
+          rationale: zod
+            .string()
+            .describe(
+              "One sentence explaining why this gap matters for the build.",
+            ),
+          answerType: zod.enum([
+            "boolean",
+            "single-select",
+            "multi-select",
+            "short-text",
+          ]),
+          options: zod
+            .array(zod.string())
+            .describe(
+              "Answer choices for boolean, single-select, and multi-select types. Empty array for short-text questions.\n",
+            ),
+          targetFields: zod
+            .array(zod.string())
+            .describe(
+              "Keys of ExtractedIntent to update when this question is answered.",
+            ),
+          priority: zod.enum(["architectural", "content"]),
+        })
+        .describe(
+          "A ranked clarifying question derived from gaps in a mined intent.",
+        ),
+    ),
+    source: zod.enum(["ai", "fallback"]),
+  })
+  .describe("Up to 3 ranked clarifying questions and their source.");

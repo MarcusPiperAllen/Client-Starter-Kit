@@ -5,9 +5,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Copy, ArrowLeft, Loader2, Frame, Save, RotateCcw, CheckCircle2, AlertCircle, PlusCircle, Sparkles, Wand2, ChevronDown, Lightbulb, ListChecks } from "lucide-react";
+import { Copy, ArrowLeft, Loader2, Frame, Save, RotateCcw, CheckCircle2, AlertCircle, PlusCircle, Sparkles, Wand2, ChevronDown, Lightbulb, ListChecks, HelpCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useMineIntent, useGenerateCopy, type GeneratedCopy } from "@workspace/api-client-react";
+import { useMineIntent, useGenerateCopy, useResolveQuestions, type GeneratedCopy, type ResolutionQuestion } from "@workspace/api-client-react";
 import {
   type FormData,
   type ExtractedIntent,
@@ -177,6 +177,150 @@ function summarizeGoal(goal: string): string {
   return cap(result.join(" "));
 }
 
+const INTENT_TO_FORM: Partial<Record<string, keyof FormData>> = {
+  organizationType: "orgType",
+  primaryGoal: "goal",
+  callToAction: "cta",
+  technologyStack: "techStack",
+  contactEmail: "email",
+  contactPhone: "phone",
+  businessName: "businessName",
+  projectName: "projectName",
+  founderName: "founderName",
+  tone: "tone",
+  audience: "audience",
+  notes: "notes",
+};
+
+function ResolutionCard({
+  question,
+  onAnswer,
+  onSkip,
+}: {
+  question: ResolutionQuestion;
+  onAnswer: (question: ResolutionQuestion, value: string | string[]) => void;
+  onSkip: (id: string) => void;
+}) {
+  const [textValue, setTextValue] = useState("");
+  const [multiSelected, setMultiSelected] = useState<string[]>([]);
+
+  const toggleMulti = (opt: string) =>
+    setMultiSelected((prev) =>
+      prev.includes(opt) ? prev.filter((o) => o !== opt) : [...prev, opt],
+    );
+
+  return (
+    <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+      <div className="space-y-1">
+        <p className="text-sm font-medium text-foreground">{question.questionText}</p>
+        <p className="text-xs text-muted-foreground">{question.rationale}</p>
+      </div>
+
+      {question.answerType === "boolean" && (
+        <div className="flex gap-2">
+          {["Yes", "No"].map((opt) => (
+            <Button key={opt} size="sm" variant="outline" onClick={() => onAnswer(question, opt)}>
+              {opt}
+            </Button>
+          ))}
+        </div>
+      )}
+
+      {question.answerType === "single-select" && (
+        <div className="flex flex-wrap gap-2">
+          {question.options.map((opt) => (
+            <Button key={opt} size="sm" variant="outline" onClick={() => onAnswer(question, opt)}>
+              {opt}
+            </Button>
+          ))}
+        </div>
+      )}
+
+      {question.answerType === "multi-select" && (
+        <div className="space-y-2">
+          <div className="flex flex-wrap gap-2">
+            {question.options.map((opt) => (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => toggleMulti(opt)}
+                className={`px-3 py-1 text-sm rounded-md border transition-colors ${
+                  multiSelected.includes(opt)
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "border-border text-foreground hover:bg-muted"
+                }`}
+              >
+                {opt}
+              </button>
+            ))}
+          </div>
+          {multiSelected.length > 0 && (
+            <Button size="sm" onClick={() => onAnswer(question, multiSelected)}>
+              Done
+            </Button>
+          )}
+        </div>
+      )}
+
+      {question.answerType === "short-text" && (
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={textValue}
+            onChange={(e) => setTextValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && textValue.trim()) onAnswer(question, textValue.trim());
+            }}
+            placeholder="Type your answer…"
+            className="flex-1 text-sm px-3 py-1.5 rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+          <Button
+            size="sm"
+            disabled={!textValue.trim()}
+            onClick={() => onAnswer(question, textValue.trim())}
+          >
+            Set
+          </Button>
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={() => onSkip(question.id)}
+        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+      >
+        Skip
+      </button>
+    </div>
+  );
+}
+
+function ResolutionStep({
+  questions,
+  answeredIds,
+  onAnswer,
+  onSkip,
+}: {
+  questions: ResolutionQuestion[];
+  answeredIds: Set<string>;
+  onAnswer: (question: ResolutionQuestion, value: string | string[]) => void;
+  onSkip: (id: string) => void;
+}) {
+  const unanswered = questions.filter((q) => !answeredIds.has(q.id));
+  if (unanswered.length === 0) return null;
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 text-sm">
+        <HelpCircle className="w-4 h-4 text-primary shrink-0" />
+        <p className="font-medium text-foreground">A few quick questions</p>
+      </div>
+      {unanswered.map((q) => (
+        <ResolutionCard key={q.id} question={q} onAnswer={onAnswer} onSkip={onSkip} />
+      ))}
+    </div>
+  );
+}
+
 export default function Home() {
   const { toast } = useToast();
   const [formData, setFormData] = useState<FormData>(() => {
@@ -206,6 +350,9 @@ export default function Home() {
   const [copySource, setCopySource] = useState<"ai" | "basic" | null>(null);
   const mineMutation = useMineIntent();
   const copyMutation = useGenerateCopy();
+  const resolveQuestionsMutation = useResolveQuestions();
+  const [resolutionQuestions, setResolutionQuestions] = useState<ResolutionQuestion[]>([]);
+  const [answeredQuestionIds, setAnsweredQuestionIds] = useState<Set<string>>(new Set());
   const isMining = mineMutation.isPending;
   const isWritingCopy = copyMutation.isPending;
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -235,6 +382,8 @@ export default function Home() {
     // The analysis (gaps/suggestions) reflects the mined snapshot; once the user
     // edits the form it is stale, so drop it to avoid feeding it into the prompt.
     setMineMeta(null);
+    setResolutionQuestions([]);
+    setAnsweredQuestionIds(new Set());
     // Clear the validation error for this field as the user types
     if (name in validationErrors) {
       setValidationErrors((prev) => ({ ...prev, [name]: undefined }));
@@ -248,6 +397,8 @@ export default function Home() {
       setFormData((prev) => ({ ...prev, [name]: value }));
     }
     setMineMeta(null);
+    setResolutionQuestions([]);
+    setAnsweredQuestionIds(new Set());
     if (name in validationErrors) {
       setValidationErrors((prev) => ({ ...prev, [name]: undefined }));
     }
@@ -278,6 +429,8 @@ export default function Home() {
       setFormData({ ...emptyData, ...draft, techStack: draft.techStack ?? "", founderName: draft.founderName ?? "" });
       setValidationErrors({});
       setMineMeta(null);
+      setResolutionQuestions([]);
+      setAnsweredQuestionIds(new Set());
       toast({ title: "Draft restored", description: "Your saved draft has been loaded.", duration: 2000 });
     } else {
       toast({ title: "No draft found", description: "Save a draft first.", duration: 2000 });
@@ -292,8 +445,27 @@ export default function Home() {
     setFormData(emptyData);
     setValidationErrors({});
     setMineMeta(null);
+    setResolutionQuestions([]);
+    setAnsweredQuestionIds(new Set());
     setShowClearConfirm(false);
     try { localStorage.removeItem(AUTOSAVE_KEY); } catch { /* ignore */ }
+  };
+
+  const handleQuestionAnswer = (question: ResolutionQuestion, value: string | string[]) => {
+    const stringValue = Array.isArray(value) ? value.join(", ") : value;
+    setFormData((prev) => {
+      const updated = { ...prev };
+      for (const field of question.targetFields) {
+        const formKey = INTENT_TO_FORM[field];
+        if (formKey) Object.assign(updated, { [formKey]: stringValue });
+      }
+      return updated;
+    });
+    setAnsweredQuestionIds((prev) => new Set([...prev, question.id]));
+  };
+
+  const handleQuestionSkip = (id: string) => {
+    setAnsweredQuestionIds((prev) => new Set([...prev, id]));
   };
 
   // Runs the AI miner; on any failure falls back to the local rule-based
@@ -345,6 +517,13 @@ export default function Home() {
     const { intent: mined, meta } = await runMiner(text);
     const { filledCount } = applyIntentToForm(mined);
     setMineMeta(meta);
+    resolveQuestionsMutation.mutate(
+      { data: { intent: mined, projectKind: meta.projectKind, suggestions: meta.suggestions, missingFields: meta.missingFields } },
+      {
+        onSuccess: (data) => setResolutionQuestions(data.questions),
+        onError: () => setResolutionQuestions([]),
+      },
+    );
     toast({
       title: meta.source === "ai" ? "Analyzed your notes" : "Filled from notes (offline)",
       description: meta.source === "ai"
@@ -549,7 +728,19 @@ export default function Home() {
                     </div>
                   )}
 
-                  {mineMeta.suggestions.length > 0 && (
+                  {resolveQuestionsMutation.isPending ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Finding the key questions…</span>
+                    </div>
+                  ) : resolutionQuestions.some((q) => !answeredQuestionIds.has(q.id)) ? (
+                    <ResolutionStep
+                      questions={resolutionQuestions}
+                      answeredIds={answeredQuestionIds}
+                      onAnswer={handleQuestionAnswer}
+                      onSkip={handleQuestionSkip}
+                    />
+                  ) : mineMeta.suggestions.length > 0 ? (
                     <div className="flex items-start gap-2 text-sm">
                       <Lightbulb className="w-4 h-4 mt-0.5 text-amber-500 shrink-0" />
                       <div className="space-y-1">
@@ -561,7 +752,7 @@ export default function Home() {
                         </ul>
                       </div>
                     </div>
-                  )}
+                  ) : null}
 
                   <p className="text-xs text-muted-foreground">
                     These notes are also folded into your build prompt so the agent fills any gaps sensibly.

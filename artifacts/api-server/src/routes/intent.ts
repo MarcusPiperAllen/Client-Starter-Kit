@@ -5,6 +5,8 @@ import {
   MineIntentResponse,
   GenerateCopyBody,
   GenerateCopyResponse,
+  ResolveQuestionsBody,
+  ResolveQuestionsResponse,
   type ExtractedIntent,
   type MinedIntentResult,
   type GeneratedCopy,
@@ -471,6 +473,252 @@ router.post("/intent/copy", async (req, res) => {
 
   // Validate our own response against the generated contract before sending.
   const validated = GenerateCopyResponse.parse(result);
+  res.json(validated);
+});
+
+// ── Intent Resolution Layer ──────────────────────────────────────────────────
+// Generates up to 3 ranked clarifying questions for a partially-filled intent.
+// Uses AI when available; falls back to a deterministic set from missing fields.
+
+type RQAnswerType = "boolean" | "single-select" | "multi-select" | "short-text";
+
+interface RQItem {
+  id: string;
+  questionText: string;
+  rationale: string;
+  answerType: RQAnswerType;
+  options: string[];
+  targetFields: string[];
+  priority: "architectural" | "content";
+}
+
+const FIELD_QUESTION_MAP: Partial<Record<keyof ExtractedIntent, Omit<RQItem, "id">>> = {
+  organizationType: {
+    questionText: "What type of organization is this?",
+    rationale:    "Organization type drives the template, tone defaults, and build prompt structure.",
+    answerType:   "single-select",
+    options:      [...ORG_TYPES],
+    targetFields: ["organizationType"],
+    priority:     "architectural",
+  },
+  technologyStack: {
+    questionText: "What technology stack should this project use?",
+    rationale:    "The stack determines the starter code, build instructions, and complexity tier.",
+    answerType:   "single-select",
+    options:      [...TECH_STACKS],
+    targetFields: ["technologyStack"],
+    priority:     "architectural",
+  },
+  primaryGoal: {
+    questionText: "What is the main goal of this project?",
+    rationale:    "The primary goal anchors the hero headline, meta description, and build prompt.",
+    answerType:   "short-text",
+    options:      [],
+    targetFields: ["primaryGoal"],
+    priority:     "architectural",
+  },
+  businessName: {
+    questionText: "What should we call this business or project?",
+    rationale:    "The name appears in the hero, SEO title, footer, and prompt header.",
+    answerType:   "short-text",
+    options:      [],
+    targetFields: ["businessName", "projectName"],
+    priority:     "content",
+  },
+  tone: {
+    questionText: "What tone should the website use?",
+    rationale:    "Tone shapes copy style, CSS palette, and brand voice.",
+    answerType:   "single-select",
+    options:      [...TONES],
+    targetFields: ["tone"],
+    priority:     "content",
+  },
+  callToAction: {
+    questionText: "What should the primary call to action be?",
+    rationale:    "The CTA appears on every hero button and closing section.",
+    answerType:   "single-select",
+    options:      [...CTAS],
+    targetFields: ["callToAction"],
+    priority:     "content",
+  },
+  audience: {
+    questionText: "Who is the primary audience for this project?",
+    rationale:    "Audience language shapes the hero copy and feature descriptions.",
+    answerType:   "short-text",
+    options:      [],
+    targetFields: ["audience"],
+    priority:     "content",
+  },
+  contactEmail: {
+    questionText: "What email address should visitors use to reach out?",
+    rationale:    "Contact email appears in the footer, contact section, and mailto links.",
+    answerType:   "short-text",
+    options:      [],
+    targetFields: ["contactEmail"],
+    priority:     "content",
+  },
+};
+
+// Priority order: architectural fields first, then content. Within each tier,
+// most-impactful-first. Only fields with a template entry are surfaced.
+const FIELD_PRIORITY_ORDER: Array<keyof ExtractedIntent> = [
+  "organizationType",
+  "technologyStack",
+  "primaryGoal",
+  "businessName",
+  "tone",
+  "callToAction",
+  "audience",
+  "contactEmail",
+];
+
+function buildFallbackQuestions(intent: ExtractedIntent, suggestions: string[]): RQItem[] {
+  const questions: RQItem[] = [];
+
+  for (const field of FIELD_PRIORITY_ORDER) {
+    if (questions.length >= 3) break;
+    if (isFilled(intent, field)) continue;
+    const template = FIELD_QUESTION_MAP[field];
+    if (!template) continue;
+    questions.push({ id: `q_${field}`, ...template });
+  }
+
+  // If slots remain, surface suggestions that signal architectural decisions.
+  if (questions.length < 3) {
+    const archSignals = ["auth", "login", "payment", "pricing", "role", "account", "database"];
+    for (const suggestion of suggestions.slice(0, 3)) {
+      if (questions.length >= 3) break;
+      if (archSignals.some((s) => suggestion.toLowerCase().includes(s))) {
+        questions.push({
+          id:           `q_suggestion_${questions.length}`,
+          questionText: suggestion,
+          rationale:    "This architectural decision affects the build prompt and starter code scaffolding.",
+          answerType:   "boolean",
+          options:      ["Yes, include this", "No, skip for now"],
+          targetFields: ["notes"],
+          priority:     "architectural",
+        });
+      }
+    }
+  }
+
+  return questions;
+}
+
+const QUESTIONS_SYSTEM_PROMPT = `You are LaunchFrame's Resolution Strategist. You receive a partially-filled project brief and identify the 1-3 most impactful gaps to resolve before a developer can build the project.
+
+Rank by impact:
+  1. ARCHITECTURAL (highest): authentication, user accounts, payments, pricing tiers, user roles, database needs, external API integrations, MVP scope decisions.
+  2. CONTENT (lower): missing business name, contact info, tone preference, CTA wording.
+
+Rules:
+- Never ask about a field that is already filled in the intent JSON.
+- Cap at 3 questions. Prefer 1-2 high-impact questions over padding with low-value ones.
+- For answerType "boolean", always use options: ["Yes, include this", "No, skip for now"] and set targetFields to ["notes"].
+- For constrained fields, use answerType "single-select" and include the exact allowed options:
+    organizationType: ${ORG_TYPES.join(", ")}
+    tone: ${TONES.join(", ")}
+    callToAction: ${CTAS.join(", ")}
+    technologyStack: ${TECH_STACKS.join(", ")}
+- For free-text fields, use answerType "short-text" and options [].
+- targetFields must be valid ExtractedIntent keys: projectName, businessName, founderName, organizationType, primaryGoal, audience, services, pages, tone, callToAction, technologyStack, contactEmail, contactPhone, notes.
+- "options" is always required — use [] for short-text questions.`;
+
+const QUESTIONS_JSON_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    questions: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          id:           { type: "string" },
+          questionText: { type: "string" },
+          rationale:    { type: "string" },
+          answerType:   { type: "string", enum: ["boolean", "single-select", "multi-select", "short-text"] },
+          options:      { type: "array", items: { type: "string" } },
+          targetFields: { type: "array", items: { type: "string" } },
+          priority:     { type: "string", enum: ["architectural", "content"] },
+        },
+        required: ["id", "questionText", "rationale", "answerType", "options", "targetFields", "priority"],
+      },
+    },
+  },
+  required: ["questions"],
+} as const;
+
+router.post("/intent/questions", async (req, res) => {
+  const parsed = ResolveQuestionsBody.safeParse(req.body);
+  if (!parsed.success) {
+    res
+      .status(400)
+      .json({ error: "A valid 'intent', 'projectKind', 'suggestions', and 'missingFields' are required." });
+    return;
+  }
+
+  const { intent, projectKind, suggestions } = parsed.data;
+
+  let questions: RQItem[];
+  let source: "ai" | "fallback" = "ai";
+
+  try {
+    const completion = await getOpenAI().chat.completions.create({
+      model: "gpt-5.4",
+      max_completion_tokens: 2048,
+      messages: [
+        { role: "system", content: QUESTIONS_SYSTEM_PROMPT },
+        { role: "user", content: JSON.stringify({ intent, projectKind, suggestions }, null, 2) },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "resolve_questions",
+          strict: true,
+          schema: QUESTIONS_JSON_SCHEMA,
+        },
+      },
+    });
+
+    const content = completion.choices[0]?.message?.content;
+    if (!content) throw new Error("Empty AI response");
+
+    const rawResult = JSON.parse(content) as Record<string, unknown>;
+    const rawQuestions = Array.isArray(rawResult.questions) ? rawResult.questions : [];
+
+    const validTypes: RQAnswerType[] = ["boolean", "single-select", "multi-select", "short-text"];
+    questions = rawQuestions
+      .slice(0, 3)
+      .map((q, i): RQItem | null => {
+        if (!q || typeof q !== "object") return null;
+        const obj = q as Record<string, unknown>;
+        const answerType = asString(obj.answerType);
+        if (!validTypes.includes(answerType as RQAnswerType)) return null;
+        const targetFields = asStringArray(obj.targetFields);
+        if (!targetFields.length) return null;
+        const questionText = asString(obj.questionText);
+        if (!questionText) return null;
+        return {
+          id:           asString(obj.id) || `q_ai_${i}`,
+          questionText,
+          rationale:    asString(obj.rationale),
+          answerType:   answerType as RQAnswerType,
+          options:      asStringArray(obj.options),
+          targetFields,
+          priority:     asString(obj.priority) === "architectural" ? "architectural" : "content",
+        };
+      })
+      .filter((q): q is RQItem => q !== null);
+
+    if (questions.length === 0) throw new Error("No valid questions in AI response");
+  } catch (err) {
+    req.log.warn({ err }, "questions: AI failed — using deterministic fallback");
+    questions = buildFallbackQuestions(intent, suggestions);
+    source = "fallback";
+  }
+
+  const validated = ResolveQuestionsResponse.parse({ questions, source });
   res.json(validated);
 });
 
