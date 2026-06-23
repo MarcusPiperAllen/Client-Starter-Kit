@@ -2079,10 +2079,18 @@ function OutputView({
     cleanGoal ? cleanGoal.split(" ").slice(0, 4).join(" ") : null,
   ].filter(Boolean) as string[];
 
+  // Resolved keyword list, shared by the SEO Starter Pack and the build prompt
+  // so every surface shows identical keywords. Rule: use the AI's buyer-intent
+  // keywords when present, otherwise the deterministic seoKeywords fallback. AI
+  // keywords are intentionally optional (the server does not reject empty
+  // keywords), and this fallback guarantees a non-empty list whenever the
+  // project is described.
+  const resolvedKeywords = (copy?.keywords?.length ?? 0) > 0 ? copy!.keywords : seoKeywords;
+
   // --- SEO Starter Pack ---
   const getSeoPack = (): string => {
     const schemaType = seoSchemaType;
-    const keywords = (copy?.keywords?.length ?? 0) > 0 ? copy!.keywords : seoKeywords;
+    const keywords = resolvedKeywords;
 
     const emailOrUrl = email ? `"email": "${email}"` : `"url": "[Add website URL]"`;
     const addressOrUrl = location
@@ -2267,7 +2275,7 @@ ${techStackInstructions}
 ## Styling & Tone Guidance
 - Visual tone: ${toneDisplay}${nuanceScaffoldNote}
 - Suggested font family: ${font.family}
-- Suggested colors: primary ${c.primary} (hover ${c.hover}), background ${c.bg}, text ${c.text}, muted ${c.muted}
+- Suggested colors: primary ${cm.primary} (hover ${cm.hover}), background ${cm.bg}, text ${cm.text}, muted ${cm.muted}
 - Use generous spacing, clear visual hierarchy, and consistent styling across all sections.
 
 ## SEO Instructions
@@ -2275,7 +2283,7 @@ ${techStackInstructions}
 - Meta description: ${seoMetaDesc}
 - Add Open Graph tags: og:title, og:description, og:type=website, and og:image (1200x630).
 - Add JSON-LD structured data using schema.org type "${seoSchemaType}" for ${bizName}.
-- Target keywords: ${(copy?.keywords?.length ?? 0) > 0 ? copy!.keywords.join(", ") : seoKeywords.length > 0 ? seoKeywords.join(", ") : "[add 2-4 target keywords]"}
+- Target keywords: ${resolvedKeywords.length > 0 ? resolvedKeywords.join(", ") : "[add 2-4 target keywords]"}
 
 ## Accessibility & Responsive Requirements
 - Use semantic HTML5 landmarks: header, nav, main, section, footer.
@@ -2478,12 +2486,12 @@ header {
     font-weight: 800;
     line-height: 1.2;
     margin-bottom: 1.25rem;
-    color: ${c.darkBg ? "#f8fafc" : "var(--text)"};
+    color: ${cm.darkBg ? "#f8fafc" : "var(--text)"};
 }
 
 .hero-sub {
     font-size: 1.15rem;
-    color: ${c.darkBg ? "#94a3b8" : "var(--muted)"};
+    color: ${cm.darkBg ? "#94a3b8" : "var(--muted)"};
     max-width: 600px;
     margin: 0 auto 2.5rem;
 }

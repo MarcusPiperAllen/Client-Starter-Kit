@@ -34,3 +34,9 @@ description: Durable design decisions behind the AI Intent Miner and Universal B
   - **Why:** a review caught that accepting model names breaks the frontend name→description map and violates the verbatim-name contract.
 - **Reject incomplete AI copy → 502 → fallback.** All high-value fields (heroHeadline, heroSubheadline, about, ctaCopy, seoTitle, metaDescription) must be non-empty after sanitize, or return 502 so the client uses templates instead of rendering blanks. `GenerateCopyResponse.parse` only enforces string type, not non-empty — the explicit guard is required.
 - **sanitizeCopy strips double/smart quotes → single and collapses whitespace** so AI copy drops safely into HTML attributes in the scaffold without escaping work.
+
+# LaunchFrame Output-Surface Consistency
+
+- **Keywords have one resolved source; never re-resolve inline.** Use `resolvedKeywords` (AI `copy.keywords` if non-empty, else deterministic `seoKeywords`) for every output surface (SEO pack + build prompt + any future surface). Empty AI keywords are intentionally allowed — the `/intent/copy` 502 guard excludes `keywords` on purpose; the client backfill guarantees a non-empty list whenever a project is described (`seoKeywords` is non-empty because `cleanGoal`/`goalDisplay` has a default).
+  - **Why:** two forked inline resolutions had drifted; consolidating prevents surfaces showing different keywords.
+- **Tone nuance palette lives in `cm`, not `c`.** `c` = base preset tone palette (`colorByTone[toneDisplay]`); `cm` = nuance-modified palette (free-text `toneNuance` shifts it, e.g. dark/minimal/warm). The generated CSS scaffold AND the prompt's "Suggested colors" line must read `cm` so the stated colors match the emitted scaffold. Using `c` for any scaffold/prompt color is a bug (nuance dark-mode silently dropped).

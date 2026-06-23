@@ -504,6 +504,10 @@ router.post("/intent/copy", async (req, res) => {
   // If the model returned blanks for any high-value copy field, treat it as a
   // failure so the client falls back to its template copy rather than rendering
   // low-value or empty AI copy.
+  // Note: `keywords` is intentionally excluded from this guard. Empty AI
+  // keywords are an allowed outcome — the client backfills deterministic
+  // buyer-intent keywords (seoKeywords), so an otherwise-good copy response is
+  // never discarded just because the model omitted keywords.
   if (
     !result.heroHeadline ||
     !result.heroSubheadline ||
