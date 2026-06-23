@@ -79,7 +79,9 @@ const emptyIntent = (): ExtractedIntent => ({
   services: [],
   pages: [],
   tone: "",
+  toneNuance: "",
   callToAction: "",
+  callToActionCustom: "",
   technologyStack: "",
   contactEmail: "",
   contactPhone: "",
@@ -114,7 +116,9 @@ function normalizeIntent(raw: unknown): ExtractedIntent {
     services: asStringArray(obj.services),
     pages: asStringArray(obj.pages),
     tone: constrain(obj.tone, TONES),
+    toneNuance: asString(obj.toneNuance),
     callToAction: constrain(obj.callToAction, CTAS),
+    callToActionCustom: asString(obj.callToActionCustom),
     technologyStack: constrain(obj.technologyStack, TECH_STACKS),
     contactEmail: asString(obj.contactEmail),
     contactPhone: asString(obj.contactPhone),
@@ -140,7 +144,9 @@ const FIELD_LABELS: Record<keyof ExtractedIntent, string> = {
   services: "Services / features",
   pages: "Pages",
   tone: "Brand tone",
+  toneNuance: "Tone nuance",
   callToAction: "Call to action",
+  callToActionCustom: "Custom CTA text",
   technologyStack: "Technology stack",
   contactEmail: "Contact email",
   contactPhone: "Contact phone",
@@ -164,7 +170,9 @@ Rules:
 - Fill every field you can confidently infer or reasonably assume from project type and context. Infer typical "services"/"pages"/"screens" for the project type even when the dump does not list them explicitly. Leave a field empty ("" or []) only when there is genuinely no basis to infer it; never invent specific contact details, personal names, or real-world facts that were not stated or strongly implied.
 - "organizationType" MUST be one of: ${ORG_TYPES.join(", ")} (or "" if none fits).
 - "tone" MUST be one of: ${TONES.join(", ")} (or "").
+- "toneNuance": a short verbatim phrase (3–8 words) capturing the user's specific tone language beyond the constrained enum, e.g. "modern, not corporate" or "bold but approachable". Capture exact language from the input. Use "" if the user said nothing specific about style or vibe.
 - "callToAction" MUST be one of: ${CTAS.join(", ")} (or "").
+- "callToActionCustom": if the user specifies an exact CTA phrase beyond a standard option (e.g. "Join the revolution", "Start building today"), capture it verbatim here. Use "" when no custom phrase was given.
 - "technologyStack" MUST be one of: ${TECH_STACKS.join(", ")} (or ""). Choose "replit-fullstack" when the project needs accounts/login, a database, dashboards, or backend logic; choose a simpler option for a marketing/brochure site.
 - "services" is a list of offerings, features, programs, products, screens, or menu items — for software, treat this as the core feature/screen list. "pages" is a list of desired site pages/sections (exclude Home and Contact, which are implied).
 - "projectKind" is "software" when the project is an app/SaaS/tool with features, accounts, or data; "website" when it is primarily an informational/marketing/brochure presence.
@@ -189,7 +197,9 @@ const RESPONSE_JSON_SCHEMA = {
         services: { type: "array", items: { type: "string" } },
         pages: { type: "array", items: { type: "string" } },
         tone: { type: "string", enum: ["", ...TONES] },
+        toneNuance: { type: "string" },
         callToAction: { type: "string", enum: ["", ...CTAS] },
+        callToActionCustom: { type: "string" },
         technologyStack: { type: "string", enum: ["", ...TECH_STACKS] },
         contactEmail: { type: "string" },
         contactPhone: { type: "string" },
@@ -205,7 +215,9 @@ const RESPONSE_JSON_SCHEMA = {
         "services",
         "pages",
         "tone",
+        "toneNuance",
         "callToAction",
+        "callToActionCustom",
         "technologyStack",
         "contactEmail",
         "contactPhone",
@@ -217,6 +229,32 @@ const RESPONSE_JSON_SCHEMA = {
   },
   required: ["intent", "projectKind", "suggestions"],
 } as const;
+
+const SIMPLICITY_SIGNALS = [
+  "no backend", "no server", "no database", "no code", "no developer",
+  "simple", "basic", "beginner", "volunteers", "limited budget", "low budget",
+  "just html", "one page", "single page",
+];
+
+const ORG_SIMPLE_STACKS: Partial<Record<string, string>> = {
+  "nonprofit":                 "html-css-js",
+  "church/faith organization": "html-css-js",
+  "community project":         "html-css-js",
+  "local service business":    "html-css-js",
+  "restaurant/food":           "html-css-js",
+  "personal brand":            "html-css-js",
+};
+
+// Fills an EMPTY technologyStack using content signals — never overrides an
+// explicit user choice or a value already set by the miner.
+function suggestTechStack(intent: ExtractedIntent): string {
+  if (intent.technologyStack) return intent.technologyStack;
+  const corpus = `${intent.notes} ${intent.primaryGoal}`.toLowerCase();
+  if (SIMPLICITY_SIGNALS.some((s) => corpus.includes(s))) return "html-css-js";
+  const orgDefault = ORG_SIMPLE_STACKS[intent.organizationType];
+  if (orgDefault) return orgDefault;
+  return "";
+}
 
 router.post("/intent/mine", async (req, res) => {
   const parsed = MineIntentBody.safeParse(req.body);
@@ -267,7 +305,8 @@ router.post("/intent/mine", async (req, res) => {
     return;
   }
 
-  const intent = normalizeIntent(rawResult.intent);
+  const rawIntent = normalizeIntent(rawResult.intent);
+  const intent: ExtractedIntent = { ...rawIntent, technologyStack: suggestTechStack(rawIntent) };
   const projectKind = rawResult.projectKind === "software" ? "software" : "website";
   const suggestions = asStringArray(rawResult.suggestions).slice(0, 5);
 
@@ -307,9 +346,11 @@ Write the following:
 - features: one entry per provided service/feature, in the same order. "name" MUST match the provided service text verbatim. "description" is ONE specific, benefit-led sentence about that feature — each description must be distinct (never a generic placeholder like "a focused feature that handles X cleanly").
 - seoTitle: a clean, search-friendly page title, ideally under 60 characters, that includes the business name and the core value. Not a chopped sentence fragment.
 - metaDescription: a compelling meta description under 155 characters that describes the offering and invites action. Complete sentences, no truncation.
-- ctaCopy: 1-2 sentences of call-to-action section copy that motivates the reader to take the selected action.
+- ctaCopy: if callToActionCustom is non-empty, use it verbatim as the button label and CTA phrase. If callToActionCustom is empty, derive natural copy from the callToAction enum value (e.g. "book a call" → "Book a Free Call"). Write 1-2 sentences motivating the reader to take the action.
+- keywords: generate 4–6 buyer-intent search phrases a potential customer would type when actively shopping for this solution. Derive phrases from audience + core service offering + geography or niche when available. Examples for a freelance proposal tool: "proposal software for freelancers", "client proposal app for designers". Do NOT use feature names, technology terms, or company names as keywords. Every phrase must read as something a real person would type into a search bar.
 
 Rules:
+- Tone: use tone as the category anchor. If toneNuance is non-empty, treat it as a more specific override — "bold but approachable" should read warmer than "bold" alone. Let toneNuance shape word choice, sentence rhythm, and energy throughout all copy fields.
 - Match the requested brand tone exactly. Adapt vocabulary to website vs software/app (e.g. "your team", "workflow", "platform" for software; service/community language for a website).
 - Be specific and credible. Do not invent facts, statistics, prices, names, or claims that were not provided or strongly implied.
 - Plain text only. No markdown, no surrounding quotation marks, no emoji, no double-quote characters inside the copy.
@@ -337,6 +378,7 @@ const COPY_RESPONSE_JSON_SCHEMA = {
     seoTitle: { type: "string" },
     metaDescription: { type: "string" },
     ctaCopy: { type: "string" },
+    keywords: { type: "array", items: { type: "string" } },
   },
   required: [
     "heroHeadline",
@@ -346,6 +388,7 @@ const COPY_RESPONSE_JSON_SCHEMA = {
     "seoTitle",
     "metaDescription",
     "ctaCopy",
+    "keywords",
   ],
 } as const;
 
@@ -362,7 +405,9 @@ function intentToBrief(intent: ExtractedIntent, projectKind: string): string {
   push("Primary goal", intent.primaryGoal);
   push("Target audience", intent.audience);
   push("Brand tone", intent.tone);
+  push("Tone nuance", intent.toneNuance);
   push("Call to action", intent.callToAction);
+  push("Custom CTA phrase", intent.callToActionCustom);
   if (intent.services.length > 0)
     lines.push(`Services/features (write one description each, names verbatim): ${intent.services.join("; ")}`);
   push("Notes", intent.notes);
@@ -452,6 +497,7 @@ router.post("/intent/copy", async (req, res) => {
     seoTitle: sanitizeCopy(rawResult.seoTitle),
     metaDescription: sanitizeCopy(rawResult.metaDescription),
     ctaCopy: sanitizeCopy(rawResult.ctaCopy),
+    keywords: asStringArray(rawResult.keywords),
     source: "ai",
   };
 

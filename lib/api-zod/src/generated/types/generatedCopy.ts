@@ -20,5 +20,8 @@ export interface GeneratedCopy {
   seoTitle: string;
   metaDescription: string;
   ctaCopy: string;
+  /** 4–6 buyer-intent search phrases a potential customer would type when actively shopping for this solution. Not feature names — real search queries derived from audience, offering, and niche.
+   */
+  keywords: string[];
   source: GeneratedCopySource;
 }

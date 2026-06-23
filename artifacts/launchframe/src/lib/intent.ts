@@ -30,7 +30,9 @@ export interface ExtractedIntent {
   services: string[];
   pages: string[];
   tone: string;
+  toneNuance: string;
   callToAction: string;
+  callToActionCustom: string;
   technologyStack: string;
   contactEmail: string;
   contactPhone: string;
@@ -56,7 +58,9 @@ export function formDataToIntent(data: FormData): ExtractedIntent {
     services: splitList(data.services),
     pages: splitList(data.pages),
     tone: data.tone,
+    toneNuance: "",
     callToAction: data.cta,
+    callToActionCustom: "",
     technologyStack: data.techStack,
     contactEmail: data.email.trim(),
     contactPhone: data.phone.trim(),
@@ -118,7 +122,9 @@ const FIELD_LABELS: Record<keyof ExtractedIntent, string> = {
   services: "Services / features",
   pages: "Pages",
   tone: "Brand tone",
+  toneNuance: "Tone nuance",
   callToAction: "Call to action",
+  callToActionCustom: "Custom CTA text",
   technologyStack: "Technology stack",
   contactEmail: "Contact email",
   contactPhone: "Contact phone",
@@ -260,8 +266,8 @@ const TECH_KEYWORDS = [
 export function parseBrainDump(text: string): ExtractedIntent {
   const intent: ExtractedIntent = {
     projectName: "", businessName: "", founderName: "", organizationType: "",
-    primaryGoal: "", audience: "", services: [], pages: [], tone: "",
-    callToAction: "", technologyStack: "", contactEmail: "", contactPhone: "", notes: "",
+    primaryGoal: "", audience: "", services: [], pages: [], tone: "", toneNuance: "",
+    callToAction: "", callToActionCustom: "", technologyStack: "", contactEmail: "", contactPhone: "", notes: "",
   };
 
   const raw: Partial<Record<keyof FormData, string>> = {};

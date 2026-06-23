@@ -42,7 +42,17 @@ export const MineIntentResponse = zod.object({
       services: zod.array(zod.string()),
       pages: zod.array(zod.string()),
       tone: zod.string(),
+      toneNuance: zod
+        .string()
+        .describe(
+          "Verbatim short phrase (3–8 words) capturing the user's specific tone language beyond the constrained enum value. Empty string when the user did not specify.\n",
+        ),
       callToAction: zod.string(),
+      callToActionCustom: zod
+        .string()
+        .describe(
+          "Free-text CTA phrase when the user specifies something beyond a standard option. Takes precedence over callToAction in copy generation and build prompt output. Empty string when nothing specific was given.\n",
+        ),
       technologyStack: zod.string(),
       contactEmail: zod.string(),
       contactPhone: zod.string(),
@@ -76,7 +86,17 @@ export const GenerateCopyBody = zod
         services: zod.array(zod.string()),
         pages: zod.array(zod.string()),
         tone: zod.string(),
+        toneNuance: zod
+          .string()
+          .describe(
+            "Verbatim short phrase (3–8 words) capturing the user's specific tone language beyond the constrained enum value. Empty string when the user did not specify.\n",
+          ),
         callToAction: zod.string(),
+        callToActionCustom: zod
+          .string()
+          .describe(
+            "Free-text CTA phrase when the user specifies something beyond a standard option. Takes precedence over callToAction in copy generation and build prompt output. Empty string when nothing specific was given.\n",
+          ),
         technologyStack: zod.string(),
         contactEmail: zod.string(),
         contactPhone: zod.string(),
@@ -111,6 +131,11 @@ export const GenerateCopyResponse = zod
     seoTitle: zod.string(),
     metaDescription: zod.string(),
     ctaCopy: zod.string(),
+    keywords: zod
+      .array(zod.string())
+      .describe(
+        "4–6 buyer-intent search phrases a potential customer would type when actively shopping for this solution. Not feature names — real search queries derived from audience, offering, and niche.\n",
+      ),
     source: zod.enum(["ai", "fallback"]),
   })
   .describe(
@@ -134,7 +159,17 @@ export const ResolveQuestionsBody = zod.object({
       services: zod.array(zod.string()),
       pages: zod.array(zod.string()),
       tone: zod.string(),
+      toneNuance: zod
+        .string()
+        .describe(
+          "Verbatim short phrase (3–8 words) capturing the user's specific tone language beyond the constrained enum value. Empty string when the user did not specify.\n",
+        ),
       callToAction: zod.string(),
+      callToActionCustom: zod
+        .string()
+        .describe(
+          "Free-text CTA phrase when the user specifies something beyond a standard option. Takes precedence over callToAction in copy generation and build prompt output. Empty string when nothing specific was given.\n",
+        ),
       technologyStack: zod.string(),
       contactEmail: zod.string(),
       contactPhone: zod.string(),

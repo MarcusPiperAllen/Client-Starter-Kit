@@ -36,7 +36,13 @@ export interface ExtractedIntent {
   services: string[];
   pages: string[];
   tone: string;
+  /** Verbatim short phrase (3–8 words) capturing the user's specific tone language beyond the constrained enum value. Empty string when the user did not specify.
+   */
+  toneNuance: string;
   callToAction: string;
+  /** Free-text CTA phrase when the user specifies something beyond a standard option. Takes precedence over callToAction in copy generation and build prompt output. Empty string when nothing specific was given.
+   */
+  callToActionCustom: string;
   technologyStack: string;
   contactEmail: string;
   contactPhone: string;
@@ -114,6 +120,9 @@ export interface GeneratedCopy {
   seoTitle: string;
   metaDescription: string;
   ctaCopy: string;
+  /** 4–6 buyer-intent search phrases a potential customer would type when actively shopping for this solution. Not feature names — real search queries derived from audience, offering, and niche.
+   */
+  keywords: string[];
   source: GeneratedCopySource;
 }
 

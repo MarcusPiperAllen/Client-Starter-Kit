@@ -1178,7 +1178,9 @@ function OutputView({
     primaryGoal: goal,
     audience,
     tone,
+    toneNuance,
     callToAction: cta,
+    callToActionCustom,
     technologyStack: techStack,
     contactEmail: email,
     contactPhone: phone,
@@ -1191,7 +1193,8 @@ function OutputView({
   const audienceDisplay = audience || "your community";
   const toneDisplay = tone || "professional";
   const ctaLabel = cta || "get in touch";
-  const ctaUpper = cap(ctaLabel);
+  const effectiveCta = callToActionCustom || ctaLabel;
+  const ctaUpper = cap(effectiveCta);
 
   // --- Proper noun capitalization helper ---
   const properNounMap: Record<string, string> = {
@@ -2197,7 +2200,7 @@ ${audienceDisplay}
 
 ## Brand Type & Tone
 - Organization type: ${orgType || "local service business"}
-- Brand tone: ${toneDisplay}
+- Brand tone: ${toneDisplay}${toneNuance ? ` (${toneNuance})` : ""}
 
 ## Pages & Navigation
 Create these pages/sections with sticky navigation linking to each:
@@ -2234,7 +2237,7 @@ ${techStackInstructions}
 - Meta description: ${seoMetaDesc}
 - Add Open Graph tags: og:title, og:description, og:type=website, and og:image (1200x630).
 - Add JSON-LD structured data using schema.org type "${seoSchemaType}" for ${bizName}.
-- Target keywords: ${seoKeywords.length > 0 ? seoKeywords.join(", ") : "[add 2-4 target keywords]"}
+- Target keywords: ${(copy?.keywords?.length ?? 0) > 0 ? copy!.keywords.join(", ") : seoKeywords.length > 0 ? seoKeywords.join(", ") : "[add 2-4 target keywords]"}
 
 ## Accessibility & Responsive Requirements
 - Use semantic HTML5 landmarks: header, nav, main, section, footer.
