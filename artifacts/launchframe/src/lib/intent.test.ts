@@ -109,6 +109,7 @@ describe("formDataToIntent", () => {
         "audience",
         "businessName",
         "callToAction",
+        "callToActionCustom",
         "contactEmail",
         "contactPhone",
         "founderName",
@@ -120,6 +121,7 @@ describe("formDataToIntent", () => {
         "services",
         "technologyStack",
         "tone",
+        "toneNuance",
       ].sort(),
     );
   });
@@ -153,5 +155,128 @@ describe("parseBrainDump — business name extraction", () => {
       "Business: Apex Steel\nApex Steel is a fabrication company. We want more leads.",
     );
     expect(intent.businessName).toBe("Apex Steel");
+  });
+});
+
+describe("parseBrainDump — project name normalization", () => {
+  it("strips stray leading 'a' before a capital letter (select-all artifact)", () => {
+    const intent = parseBrainDump("aSlimInvoice\nGoal: get more freelance clients");
+    expect(intent.businessName).toBe("SlimInvoice");
+  });
+
+  it("strips stray 'a' from labeled business name", () => {
+    const intent = parseBrainDump("Business: aSlimInvoice\nGoal: generate revenue");
+    expect(intent.businessName).toBe("SlimInvoice");
+  });
+
+  it("strips leading 'So, ' opener from inferred name", () => {
+    const intent = parseBrainDump("So, SlimInvoice\nGoal: get more freelance clients");
+    expect(intent.businessName).toBe("SlimInvoice");
+  });
+
+  it("strips leading 'my ' possessive from labeled name", () => {
+    const intent = parseBrainDump("Business: my BriefStack");
+    expect(intent.businessName).toBe("BriefStack");
+  });
+
+  it("does not strip legitimate multi-word business names", () => {
+    const intent = parseBrainDump("Business: Iron Rod Steel");
+    expect(intent.businessName).toBe("Iron Rod Steel");
+  });
+
+  it("does not strip names that start with intentional lowercase", () => {
+    const intent = parseBrainDump("Business: eBay Clone");
+    expect(intent.businessName).toBe("eBay Clone");
+  });
+});
+
+describe("parseBrainDump — tone nuance detection", () => {
+  it("detects 'dark mode' from free text and populates toneNuance", () => {
+    const intent = parseBrainDump("ThriftMarket\nCool marketplace. Dark mode by default.");
+    expect(intent.toneNuance).toContain("dark mode");
+  });
+
+  it("detects 'dark by default' phrasing", () => {
+    const intent = parseBrainDump("App site. Dark by default, Gen Z aesthetic.");
+    expect(intent.toneNuance).toContain("dark mode");
+  });
+
+  it("detects 'luxury' from free text", () => {
+    const intent = parseBrainDump("Luxury boutique for premium clients.");
+    expect(intent.toneNuance).toContain("luxury");
+  });
+
+  it("detects 'minimal' / 'minimalist' from free text", () => {
+    const intent = parseBrainDump("We want a clean, minimalist portfolio site.");
+    expect(intent.toneNuance).toContain("minimal");
+  });
+
+  it("detects 'not corporate' phrase", () => {
+    const intent = parseBrainDump("Warm tone, not corporate — friendly and direct.");
+    expect(intent.toneNuance).toContain("not corporate");
+  });
+
+  it("detects multiple nuance signals and joins them", () => {
+    const intent = parseBrainDump("We want a luxury minimal experience.");
+    expect(intent.toneNuance).toContain("luxury");
+    expect(intent.toneNuance).toContain("minimal");
+  });
+
+  it("returns empty toneNuance when no nuance signal is present", () => {
+    const intent = parseBrainDump("Business: Acme Corp\nGoal: get more leads");
+    expect(intent.toneNuance).toBe("");
+  });
+});
+
+describe("parseBrainDump — smart CTA extraction", () => {
+  it("maps 'join waitlist' to callToActionCustom 'Join Waitlist'", () => {
+    const intent = parseBrainDump("I want a join waitlist form above the fold.");
+    expect(intent.callToActionCustom).toBe("Join Waitlist");
+  });
+
+  it("maps 'waitlist signup' to callToActionCustom 'Join Waitlist'", () => {
+    const intent = parseBrainDump("SlimInvoice — waitlist signup for beta users.");
+    expect(intent.callToActionCustom).toBe("Join Waitlist");
+  });
+
+  it("maps 'early access' to callToActionCustom 'Get Early Access'", () => {
+    const intent = parseBrainDump("Get early access to our new platform.");
+    expect(intent.callToActionCustom).toBe("Get Early Access");
+  });
+
+  it("maps 'volunteer' to callToAction 'get involved' and callToActionCustom 'Volunteer Today'", () => {
+    const intent = parseBrainDump("Nonprofit site. We need people to volunteer and help.");
+    expect(intent.callToAction).toBe("get involved");
+    expect(intent.callToActionCustom).toBe("Volunteer Today");
+  });
+
+  it("maps 'donate' to callToAction 'donate'", () => {
+    const intent = parseBrainDump("Charity site. Please donate to support our mission.");
+    expect(intent.callToAction).toBe("donate");
+  });
+
+  it("maps 'give' to callToAction 'donate'", () => {
+    const intent = parseBrainDump("Help us grow. Give today to make a difference.");
+    expect(intent.callToAction).toBe("donate");
+  });
+
+  it("maps 'make a gift' to callToAction 'donate'", () => {
+    const intent = parseBrainDump("Encourage supporters to make a gift to the foundation.");
+    expect(intent.callToAction).toBe("donate");
+  });
+
+  it("maps 'book a call' to callToAction 'book a call'", () => {
+    const intent = parseBrainDump("Coaching site. Book a call to get started.");
+    expect(intent.callToAction).toBe("book a call");
+  });
+
+  it("maps 'get a quote' to callToAction 'request a quote'", () => {
+    const intent = parseBrainDump("Plumbing company. Get a quote for your repair.");
+    expect(intent.callToAction).toBe("request a quote");
+  });
+
+  it("maps 'get estimate' to callToAction 'request a quote'", () => {
+    const intent = parseBrainDump("Roofing contractor. Get estimate for your project.");
+    expect(intent.callToAction).toBe("request a quote");
   });
 });

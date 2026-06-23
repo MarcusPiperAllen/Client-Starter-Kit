@@ -246,11 +246,11 @@ const CTA_KEYWORDS = [
   ["request a demo", ["demo", "request a demo", "book a demo", "schedule a demo"]],
   ["book catering", ["book catering", "catering"]],
   ["book a call", ["book a call", "schedule a call", "consultation", "discovery call", "book an appointment", "appointment", "book now", "schedule a visit"]],
-  ["request a quote", ["quote", "estimate", "get a quote"]],
+  ["request a quote", ["quote", "estimate", "get a quote", "get estimate"]],
   ["view menu", ["view menu", "see menu", "our menu", "menu"]],
-  ["donate", ["donate", "donation", "give now", "support our cause"]],
+  ["donate", ["donate", "donation", "give now", "give today", "make a gift", "support our cause", "support our mission", "support us", "give"]],
   ["shop now", ["shop now", "buy now", "purchase", "order now", "add to cart", "order online"]],
-  ["get involved", ["get involved", "volunteer", "join us", "become a member"]],
+  ["get involved", ["get involved", "volunteer", "sign up to volunteer", "join us", "become a member"]],
   ["contact us", ["contact us", "get in touch", "reach out", "contact"]],
   ["learn more", ["learn more", "find out more", "read more"]],
 ] as const;
@@ -262,6 +262,47 @@ const TECH_KEYWORDS = [
   ["html-css-js", ["javascript", "vanilla js", "interactive", "js"]],
   ["html-css", ["html", "css", "static site", "static", "simple site", "landing page"]],
 ] as const;
+
+// Detects visual/aesthetic nuance phrases in free text to populate toneNuance.
+// Captures signals like "dark mode", "luxury", "minimal", "not corporate" so
+// the existing cm palette modifier fires automatically from the brain dump,
+// not just from the manual Tone Nuance form field.
+const NUANCE_DETECTORS: ReadonlyArray<readonly [string, RegExp]> = [
+  ["dark mode",        /\bdark\s+mode\b|\bdark\s+by\s+default\b/i],
+  ["luxury",           /\bluxury\b|\bluxurious\b/i],
+  ["minimal",          /\bminimal\b|\bminimalist\b/i],
+  ["not corporate",    /\bnot\s+corporate\b|\bnon-corporate\b/i],
+  ["modern and clean", /\bmodern\b.{0,30}\bclean\b|\bclean\b.{0,30}\bmodern\b/i],
+  ["bold",             /\bbold\b/i],
+  ["playful",          /\bplayful\b/i],
+] as const;
+
+function detectNuance(text: string): string {
+  const found: string[] = [];
+  for (const [phrase, re] of NUANCE_DETECTORS) {
+    if (re.test(text)) {
+      found.push(phrase);
+      if (found.length >= 3) break;
+    }
+  }
+  return found.join(", ");
+}
+
+// Strips common prefix artifacts from extracted project/business names so
+// accidental leading characters ("aSlimInvoice" from select-all), informal
+// openers ("So, MyApp", "my BriefStack"), and stray articles don't pollute
+// the field. Conservative: only strips patterns clearly not part of the name.
+function normalizeProjectName(name: string): string {
+  if (!name) return name;
+  let result = name;
+  // Stray lowercase 'a' immediately before a capital letter (select-all artifact)
+  result = result.replace(/^a(?=[A-Z])/, "");
+  // Leading "so," / "so " opener (e.g. "So, BriefStack" -> "BriefStack")
+  result = result.replace(/^so[,\s]+/i, "");
+  // Leading "my " possessive (e.g. "my BriefStack" -> "BriefStack")
+  result = result.replace(/^my\s+/i, "");
+  return result.trim();
+}
 
 export function parseBrainDump(text: string): ExtractedIntent {
   const intent: ExtractedIntent = {
@@ -292,8 +333,8 @@ export function parseBrainDump(text: string): ExtractedIntent {
   const splitItems = (v: string): string[] =>
     v.split(/[,;\n]|\sand\s/i).map((s) => s.trim()).filter(Boolean);
 
-  intent.projectName = raw.projectName ?? "";
-  intent.businessName = raw.businessName ?? "";
+  intent.projectName = normalizeProjectName(raw.projectName ?? "");
+  intent.businessName = normalizeProjectName(raw.businessName ?? "");
   intent.founderName = raw.founderName ?? "";
   intent.primaryGoal = raw.goal ?? "";
   intent.audience = raw.audience ?? "";
@@ -315,13 +356,15 @@ export function parseBrainDump(text: string): ExtractedIntent {
   // the business name, and a goal sentence usually contains an intent verb.
   if (!intent.businessName && leftover.length > 0) {
     const first = leftover[0];
-    if (first.split(/\s+/).length <= 5 && first.length <= 60 && !/[.!?]$/.test(first)) {
-      intent.businessName = first;
+    // Strip common informal openers before applying name-extraction heuristics.
+    const firstNorm = first.replace(/^so[,\s]+/i, "").replace(/^my\s+/i, "").trim();
+    if (firstNorm.split(/\s+/).length <= 5 && firstNorm.length <= 60 && !/[.!?]$/.test(firstNorm)) {
+      intent.businessName = normalizeProjectName(firstNorm);
       leftover = leftover.slice(1);
     } else {
       // Single-paragraph dump: infer name from "CompanyName is a ..." opening sentence.
-      const m = first.match(/^([A-Z][A-Za-z0-9 &'.-]{1,50}?)\s+(?:is|are|was)\s+(?:a|an|the)\b/);
-      if (m) intent.businessName = m[1].trim();
+      const m = firstNorm.match(/^([A-Z][A-Za-z0-9 &'.-]{1,50}?)\s+(?:is|are|was)\s+(?:a|an|the)\b/);
+      if (m) intent.businessName = normalizeProjectName(m[1].trim());
     }
   }
   if (!intent.primaryGoal) {
@@ -331,6 +374,27 @@ export function parseBrainDump(text: string): ExtractedIntent {
       leftover = leftover.filter((l) => l !== goalLine);
     }
   }
+
+  // Detect custom CTA phrases that have no standard option (waitlist, early
+  // access) and route them to callToActionCustom so effectiveCta in the UI
+  // shows the specific phrase rather than a generic fallback.
+  if (!intent.callToActionCustom) {
+    if (/\b(join\s+(?:the\s+)?waitlist|waitlist\s+signup)\b/i.test(text)) {
+      intent.callToActionCustom = "Join Waitlist";
+    } else if (/\b(get\s+early\s+access|early\s+access)\b/i.test(text)) {
+      intent.callToActionCustom = "Get Early Access";
+    } else if (/\bvolunteer\b/i.test(text)) {
+      // "volunteer" maps to the standard "get involved" CTA; add a friendlier
+      // custom phrase so the generated output shows "Volunteer Today".
+      intent.callToActionCustom = "Volunteer Today";
+      if (!intent.callToAction) intent.callToAction = "get involved";
+    }
+  }
+
+  // Detect visual/aesthetic nuance from the brain dump and route it to
+  // toneNuance so the cm palette modifier fires automatically without the user
+  // needing to fill in the Tone Nuance field manually.
+  intent.toneNuance = detectNuance(text);
 
   const notesParts: string[] = [];
   if (raw.notes) notesParts.push(raw.notes);

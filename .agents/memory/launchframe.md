@@ -40,3 +40,10 @@ description: Durable design decisions behind the AI Intent Miner and Universal B
 - **Keywords have one resolved source; never re-resolve inline.** Use `resolvedKeywords` (AI `copy.keywords` if non-empty, else deterministic `seoKeywords`) for every output surface (SEO pack + build prompt + any future surface). Empty AI keywords are intentionally allowed — the `/intent/copy` 502 guard excludes `keywords` on purpose; the client backfill guarantees a non-empty list whenever a project is described (`seoKeywords` is non-empty because `cleanGoal`/`goalDisplay` has a default).
   - **Why:** two forked inline resolutions had drifted; consolidating prevents surfaces showing different keywords.
 - **Tone nuance palette lives in `cm`, not `c`.** `c` = base preset tone palette (`colorByTone[toneDisplay]`); `cm` = nuance-modified palette (free-text `toneNuance` shifts it, e.g. dark/minimal/warm). The generated CSS scaffold AND the prompt's "Suggested colors" line must read `cm` so the stated colors match the emitted scaffold. Using `c` for any scaffold/prompt color is a bug (nuance dark-mode silently dropped).
+
+# LaunchFrame Capture Fidelity
+
+- **normalizeProjectName() runs on BOTH paths.** The helper (strip stray 'a' before capital, "so,", "my ") is inlined on the server in normalizeIntent() AND in the client parseBrainDump(). Any change to the stripping logic must be applied to both files to keep paths consistent.
+  - Files: `artifacts/launchframe/src/lib/intent.ts`, `artifacts/api-server/src/routes/intent.ts`
+- **toneNuance is populated by the fallback parser via NUANCE_DETECTORS.** The isDarkNuance/isMinimalNuance/isEnergeticNuance/isWarmNuance regexes in home.tsx fire automatically once toneNuance is populated upstream — no CSS change needed.
+- **callToActionCustom is the right field for non-standard CTAs.** "Join Waitlist", "Get Early Access", "Volunteer Today" go to callToActionCustom (effectiveCta = callToActionCustom || ctaLabel takes priority). Do not add these to the CTAS allowed list on the server.

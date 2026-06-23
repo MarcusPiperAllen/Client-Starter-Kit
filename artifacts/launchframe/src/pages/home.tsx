@@ -449,6 +449,8 @@ export default function Home() {
     setAnsweredQuestionIds(new Set());
     setShowClearConfirm(false);
     try { localStorage.removeItem(AUTOSAVE_KEY); } catch { /* ignore */ }
+    try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+    setDraftExists(false);
   };
 
   const handleQuestionAnswer = (question: ResolutionQuestion, value: string | string[]) => {

@@ -102,13 +102,24 @@ const constrain = (v: unknown, allowed: readonly string[]): string => {
 };
 
 // Normalize raw model JSON into the canonical, schema-valid intent. Any field
+// Mirrors the client-side normalizeProjectName in intent.ts: strips the same
+// prefix artifacts so both paths (AI miner + fallback parser) behave consistently.
+function normalizeProjectName(name: string): string {
+  if (!name) return name;
+  let result = name;
+  result = result.replace(/^a(?=[A-Z])/, "");
+  result = result.replace(/^so[,\s]+/i, "");
+  result = result.replace(/^my\s+/i, "");
+  return result.trim();
+}
+
 // the model omits or fills with an out-of-range value is reduced to a safe
 // default so the response always conforms to ExtractedIntent.
 function normalizeIntent(raw: unknown): ExtractedIntent {
   const obj = (raw ?? {}) as Record<string, unknown>;
   return {
-    projectName: asString(obj.projectName),
-    businessName: asString(obj.businessName),
+    projectName: normalizeProjectName(asString(obj.projectName)),
+    businessName: normalizeProjectName(asString(obj.businessName)),
     founderName: asString(obj.founderName),
     organizationType: constrain(obj.organizationType, ORG_TYPES),
     primaryGoal: asString(obj.primaryGoal),
@@ -170,9 +181,9 @@ Rules:
 - Fill every field you can confidently infer or reasonably assume from project type and context. Infer typical "services"/"pages"/"screens" for the project type even when the dump does not list them explicitly. Leave a field empty ("" or []) only when there is genuinely no basis to infer it; never invent specific contact details, personal names, or real-world facts that were not stated or strongly implied.
 - "organizationType" MUST be one of: ${ORG_TYPES.join(", ")} (or "" if none fits).
 - "tone" MUST be one of: ${TONES.join(", ")} (or "").
-- "toneNuance": a short verbatim phrase (3–8 words) capturing the user's specific tone language beyond the constrained enum, e.g. "modern, not corporate" or "bold but approachable". Capture exact language from the input. Use "" if the user said nothing specific about style or vibe.
-- "callToAction" MUST be one of: ${CTAS.join(", ")} (or "").
-- "callToActionCustom": if the user specifies an exact CTA phrase beyond a standard option (e.g. "Join the revolution", "Start building today"), capture it verbatim here. Use "" when no custom phrase was given.
+- "toneNuance": a short verbatim phrase (3–8 words) capturing the user's specific visual/aesthetic language beyond the constrained tone enum. ALWAYS scan for visual nuance signals: "dark mode", "dark by default", "luxury", "luxurious", "minimal", "minimalist", "modern and clean", "not corporate", "Gen Z", "bold accent", "playful". If ANY appear, capture them here verbatim — do NOT bury them only in notes or suggestions. E.g. "dark mode, minimal", "luxury, not corporate", "modern and clean". Use "" only when the user says nothing specific about visual style or feel.
+- "callToAction" MUST be one of: ${CTAS.join(", ")} (or ""). Use "learn more" ONLY when no specific conversion action is stated. If the user mentions waitlist signup, booking, quoting, donating, volunteering, or any specific action, choose the closest matching option.
+- "callToActionCustom": for specific conversion phrases with no standard match, capture the phrase here (e.g. "Join Waitlist" when the user says "join the waitlist" or "waitlist signup", "Get Early Access" for early access, "Volunteer Today" for volunteer-focused CTAs, or any custom phrase explicitly stated). Use "" only when no specific custom phrase was given.
 - "technologyStack" MUST be one of: ${TECH_STACKS.join(", ")} (or ""). Choose "replit-fullstack" when the project needs accounts/login, a database, dashboards, or backend logic; choose a simpler option for a marketing/brochure site.
 - "services" is a list of offerings, features, programs, products, screens, or menu items — for software, treat this as the core feature/screen list. "pages" is a list of desired site pages/sections (exclude Home and Contact, which are implied).
 - "projectKind" is "software" when the project is an app/SaaS/tool with features, accounts, or data; "website" when it is primarily an informational/marketing/brochure presence.
