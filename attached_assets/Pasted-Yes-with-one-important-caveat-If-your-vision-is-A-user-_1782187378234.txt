@@ -1,0 +1,347 @@
+Yes—with one important caveat.
+
+If your vision is:
+
+> "A user can dump everything they know about an idea, and LaunchFrame helps them think through it, structures it, identifies gaps, and produces the best possible starter prompt for an AI builder."
+
+Then **#15 absolutely moves you toward the vision.**
+
+**#16 improves the quality of the output.**
+
+Those are different categories.
+
+---
+
+# How I would score them against the vision
+
+### #15 Intent Resolution Layer
+
+**Vision Alignment: 9.5/10**
+
+This directly addresses the biggest criticism from the audit:
+
+> LaunchFrame listens, thinks, and answers.
+>
+> It does not ask.
+
+Right now:
+
+```text
+Brain Dump
+↓
+Intent Miner
+↓
+Prompt
+```
+
+After #15:
+
+```text
+Brain Dump
+↓
+Intent Miner
+↓
+Questions
+↓
+User Clarification
+↓
+Prompt
+```
+
+That is much closer to an actual strategist.
+
+The biggest win isn't the questions.
+
+The biggest win is:
+
+```text
+AI identifies uncertainty
+↓
+User resolves uncertainty
+↓
+Prompt improves
+```
+
+That's real intent mining.
+
+---
+
+# What I like about #15
+
+The plan correctly avoids building:
+
+* chat
+* memory
+* accounts
+* agents talking forever
+
+Those are distractions right now.
+
+The product doesn't need:
+
+> "Hey Marcus, tell me more."
+
+for 25 turns.
+
+The product needs:
+
+> "Before I build this, answer these 3 important things."
+
+Huge difference.
+
+---
+
+# The only thing I'd add to #15
+
+I would slightly revise:
+
+> maximum 3 questions
+
+to:
+
+```text
+1–3 questions
+```
+
+Why?
+
+Sometimes the miner may only find:
+
+```text
+Missing business name
+```
+
+One question.
+
+Other times:
+
+```text
+User roles
+Client portal
+Billing
+```
+
+Three questions.
+
+Forcing three every time might create noise.
+
+---
+
+# #16 Output Fidelity & Polish
+
+**Vision Alignment: 7.5/10**
+
+Important.
+
+Necessary.
+
+But not the core vision.
+
+This is:
+
+```text
+Make output better.
+```
+
+not
+
+```text
+Make thinking better.
+```
+
+---
+
+# Why #16 still matters
+
+The audit exposed a bunch of fidelity problems:
+
+Examples:
+
+### Current
+
+```text
+Tone:
+Professional
+```
+
+User actually said:
+
+```text
+Modern
+Clean
+Not corporate
+Product-led
+```
+
+You lost information.
+
+---
+
+### Current
+
+```text
+Keywords:
+User authentication
+Client dashboard
+```
+
+Nobody searches that.
+
+---
+
+### Current
+
+```text
+SaaS CSS
+=
+Nonprofit CSS
+```
+
+That's clearly wrong.
+
+---
+
+So #16 makes the output feel less templated.
+
+That's valuable.
+
+---
+
+# The bigger picture
+
+If I were drawing the roadmap now:
+
+### Phase 1 (mostly done)
+
+```text
+Brain Dump
+↓
+Intent Extraction
+↓
+Prompt
+```
+
+Completed.
+
+---
+
+### Phase 2 (#15)
+
+```text
+Brain Dump
+↓
+Intent Extraction
+↓
+Clarification Questions
+↓
+Prompt
+```
+
+This is the next milestone.
+
+---
+
+### Phase 3 (#16)
+
+```text
+Brain Dump
+↓
+Intent Extraction
+↓
+Clarification
+↓
+High Fidelity Output
+↓
+Prompt
+```
+
+Now it feels professional.
+
+---
+
+### Phase 4 (future)
+
+```text
+Brain Dump
+↓
+Intent Extraction
+↓
+Clarification
+↓
+Gap Resolution
+↓
+Prompt
+↓
+Build Plan
+↓
+Agent Handoff
+```
+
+This is where it starts feeling like a true product strategist.
+
+---
+
+# One thing still missing from the vision
+
+The audit touched on it, but neither #15 nor #16 fully solve it.
+
+The vision eventually needs:
+
+### Intent Confidence
+
+Example:
+
+```text
+Business Name
+✓ High confidence
+
+Target Audience
+✓ High confidence
+
+Pricing Model
+⚠ Low confidence
+
+User Roles
+⚠ Missing
+
+Client Portal
+⚠ Missing
+```
+
+Not necessarily now.
+
+But eventually.
+
+Because the miner shouldn't just tell you:
+
+> Here's my answer.
+
+It should tell you:
+
+> Here's how sure I am.
+
+That would make LaunchFrame feel much more intelligent.
+
+---
+
+## My recommendation
+
+**Approve #15 exactly as written (with a minor tweak to make it 1–3 questions instead of always 3).**
+
+**Approve #16 immediately afterward.**
+
+If I had to choose only one:
+
+**#15 is far more important to the vision than #16.**
+
+#15 makes LaunchFrame smarter.
+
+#16 makes LaunchFrame prettier and more accurate.
+
+The audit's biggest takeaway was not "the prompts need better CSS."
+
+The takeaway was:
+
+> "The product needs to ask before it builds." 
+
+That's what moves LaunchFrame from a smart intake form toward the intent miner you've been describing.

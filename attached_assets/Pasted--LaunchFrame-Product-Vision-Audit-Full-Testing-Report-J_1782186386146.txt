@@ -1,0 +1,306 @@
+---
+
+# LaunchFrame Product Vision Audit
+### Full Testing Report — June 22, 2026
+
+---
+
+## Audit Overview
+
+Six project types were tested in sequence using natural, rambling, incomplete human-language brain dumps: a SaaS startup (ProposalKit), a local service business (landscaping company), a personal brand (life coach), a nonprofit (tutoring organization), a mobile app (social habit tracker), and a marketplace (artisan food platform). Each test was run exactly as a real user would interact with the product.
+
+A screen recording GIF of the full session has been downloaded (`launchframe-audit.gif`).
+
+---
+
+## What LaunchFrame Actually Is Today
+
+The current product flow is: **Brain Dump → AI Analysis → Form Auto-Population → Intent Gap Suggestions → Universal Agent Build Prompt + Supporting Reference.**
+
+The homepage tag line reads: *"Turn project details into a copy-ready build prompt for any AI coding agent."*
+
+The UI has three entry paths: **Review & fill form** (fills the form and shows the analysis panel before you generate), **Auto-build prompt** (fills the form and immediately generates the prompt), and **Generate Build Prompt** (manually triggered from a filled form).
+
+The output page renders a dark-code-block prompt labeled "Universal Agent Build Prompt," plus a Supporting Reference section containing: Suggested Navigation, Homepage Section Plan, Hero Copy, About Draft, Features Draft, CTA Copy, Technology Stack, Content Checklist, SEO Starter Pack (title, meta, OG tags, JSON-LD schema, keywords), Starter HTML, and Starter CSS.
+
+---
+
+## Screenshots
+
+All key screenshots were captured during live testing:
+
+- **ss_76904hdf4** — LaunchFrame homepage on load
+- **ss_6393hlh08** — SaaS brain dump entered (ProposalKit)
+- **ss_9527e3c00** — Analysis panel after "Review & fill form" for SaaS test
+- **ss_6142av0e2** — Universal Agent Build Prompt output for SaaS test
+- **ss_2241vcpzz** — Analysis panel for Local Service Business (GreenScape AZ)
+- **ss_8601errvg** — Analysis panel for Personal Brand (life coach / Redefine You)
+- **ss_3545b7htu** — Build Prompt output for Nonprofit (BrightPath Chicago)
+- **ss_4377oxhu5** — Analysis panel for Mobile App (social habit tracker)
+- **ss_8096izo3m** — Analysis panel for Marketplace (artisan food platform)
+- **ss_7777omkoi** — Build Prompt output for Marketplace
+
+---
+
+## Evaluation Area 1: Intent Understanding
+
+**Score: 8 / 10**
+
+LaunchFrame consistently understood the actual intent behind each brain dump at a level that goes well beyond keyword matching. Across all six tests, the system correctly identified the business type (SaaS startup, local service business, website, nonprofit, software/app, software/app) and presented the categorization via an "AI analyzed" label that updated appropriately for each. It was never wrong about fundamental business category.
+
+More impressively, the system inferred information that wasn't explicitly stated. In the local service business test, the user (Carlos) signed their brain dump with only an email — `carlos@greenscapeaz.com` — and never stated a company name. LaunchFrame derived "GreenScape AZ" from the email domain. In the nonprofit test, the system expanded the target audience to include "grantmakers" and "community partners" — groups not mentioned in the dump but critically important for a nonprofit's credibility goals. In the marketplace test, it correctly inferred that an admin dashboard and seller approval workflow would be required, despite the user never mentioning admin functionality.
+
+Where intent understanding dropped short of a 9 or 10: the system did not challenge or re-frame confused premises. For example, in the mobile app test, the user said "iOS first" but disclosed they only know "React Native a little" — React Native is cross-platform, making "iOS first" a different architectural decision than it sounds. The system flagged this in suggestions ("confirm whether you want the first version built as a mobile app, a web MVP, or a base plus landing page foundation first") but didn't do the heavier lifting of explaining the architectural tension. A true intent miner would surface that contradiction more forcefully.
+
+---
+
+## Evaluation Area 2: Intent Mining Quality
+
+**Score: 7.5 / 10**
+
+This is where LaunchFrame's ambitions show most clearly — and also where the most room for growth exists.
+
+The Suggestions panel that appears after analysis is genuinely good. It consistently surfaces strategic gaps that a working consultant would ask about:
+
+**SaaS test suggestions included:** product name finalization, pricing model decisions (freemium vs. single paid plan), payment collection scope (tracking-only vs. in-app payments), proposal acceptance flow (e-signature vs. checkbox vs. confirmation), and visual style direction. These are the exact five questions a product consultant would ask before writing a spec.
+
+**Local business suggestions included:** branding assets, testimonials and trust signals, before/after photo strategy, quote form field specifications, and Google Business Profile connectivity. That last one — proactively suggesting Google Business Profile — is not in the form at all, but is strategically critical for a local SEO-focused landscaper.
+
+**Nonprofit suggestions included:** contact details for credibility, one-time vs. recurring donations distinction, a recommended Grants/Partners page (not mentioned by the user), and whether parents/students should be able to apply through the site.
+
+**Marketplace suggestions included:** Stripe Connect specifics (not generic payment), shipping decision framing, geographic scope, and separate buyer/seller/admin account architecture.
+
+The system is clearly doing something more than pattern matching — it's applying domain-specific knowledge to each project type.
+
+Where it falls short of a 9 or 10: the suggestions are **presented as a static list** that the user reads and then ignores. There is no mechanism to actually respond to or resolve those suggestions before generating the prompt. The suggestions say "confirm whether..." but there is nowhere to confirm. The user can edit the form fields manually, but there is no guided conversation. The gap-resolution process is entirely manual and disconnected from the suggestion list. This is the largest single improvement opportunity in the product: the gap list should be interactive.
+
+Additionally, the system doesn't ask questions conversationally. It analyzes and outputs, but never says "Before I build your prompt, I have two questions for you." That would be the difference between an intent miner and an AI strategist.
+
+---
+
+## Evaluation Area 3: Form Population Quality
+
+**Score: 8.5 / 10**
+
+Form population quality was strong to excellent across all six tests. The system filled between 9 and 14 fields per test and did so with meaningful, contextualized text rather than copied-and-pasted fragments from the brain dump.
+
+The Primary Website Goal field was consistently the strongest — each test produced a well-formed, specific goal statement that synthesized the user's scattered intent rather than echoing it. For the landscaping company: "Create a simple, credible landscaping website that helps the business appear professional, rank locally on Google, and generate quote requests and phone calls from homeowners and some commercial clients in the Phoenix area." That's not a pulled quote — it's a synthesis.
+
+Key Features / Modules were correctly populated and intelligently expanded. In the marketplace test, the user mentioned "product listings, seller profiles, search/filter, a cart, checkout" and the system added: seller application and vetting workflow, commission-based order processing, local pickup ordering flow, buyer order confirmation and receipts, seller dashboard, and admin dashboard. Every addition is logically necessary and not hallucinated from outside the user's context.
+
+The Notes field was used intelligently — it contained the system's own reasoning, not user notes — which is a subtle but important design choice. It means the AI's assumptions travel with the form data and show up in the generated prompt.
+
+When information was genuinely missing (mobile app and marketplace tests lacked a business name), the system correctly flagged this as "Still needed: Business / organization name" rather than inventing one — a sign of appropriate epistemic humility.
+
+**Weaknesses:**
+
+The **Brand Tone** dropdown is a constraint on nuance. In the SaaS test, the user explicitly said "modern and clean, not corporate" — the system chose "Professional" from the dropdown, which is the closest available option but loses the user's specifically anti-corporate intention. Dropdowns for tone will always lose fidelity. The tone instruction is partially rescued by being included in the Notes, but the form field itself is a blunt instrument.
+
+The **Call to Action** dropdown similarly constrains creativity. For the nonprofit, "Donate Now" or "Volunteer Today" would have been more appropriate than the default options designed for SaaS/service businesses.
+
+The **Preferred Build Type** dropdown defaulted to "Full-Stack Web App" in most cases, which is a reasonable default but misses nuance — the marketplace probably wants a different stack recommendation than the personal brand site.
+
+---
+
+## Evaluation Area 4: Universal Agent Build Prompt Quality
+
+**Score: 8 / 10**
+
+The core product — the Universal Agent Build Prompt — is the strongest component in LaunchFrame. The prompt structure is well-designed for AI coding agents. It includes:
+
+- Project Summary with business context
+- Application Requirements with clear instruction type (software vs. brochure site)
+- Core features list with data model and auth guidance
+- Target Audience
+- Brand Type & Tone
+- Pages & Navigation
+- Homepage Section Order
+- Detailed Feature descriptions (not just labels — full benefit statements)
+- Ready-to-paste marketing copy (hero headline, subheadline, about section, CTA)
+- Suggested Tech Stack with specific implementation instructions
+- SEO Instructions with JSON-LD schema, OG tags, and target keywords
+- Accessibility & Responsive Requirements (WCAG AA, mobile-first, reduced motion)
+- Fill-the-Gaps Instructions telling the agent what to decide autonomously
+- Recommendations to Address (the gap list embedded in the prompt itself)
+- Content Checklist (practical pre-build asset list)
+- Starter HTML + Starter CSS (complete, implementation-ready code)
+
+The fact that the **gap list travels into the prompt** is a smart design. Even if the user doesn't resolve the suggestions before generating, the coding agent receives those open questions as inline guidance. The agent knows what to decide and what the human chose not to decide.
+
+The hero copy quality was high across all tests. "From Proposal to Payment, in One Place" (SaaS) and "Bring Handmade Food to More Tables" (marketplace) are genuinely strong lines, not GPT-generic filler.
+
+The prompt correctly distinguishes between a brochure site and a full software product — a crucial difference that determines whether an AI agent builds a landing page or a full-stack application.
+
+**Weaknesses:**
+
+The SEO keyword targeting is weak. In the SaaS test, suggested keywords included "user authentication and account management" and "client dashboard and client records" — these are feature names, not searchable buyer intent phrases. A consultant would suggest "proposal software for freelancers" or "invoice tool for designers." The keyword logic appears to be pulling from feature names rather than performing any market intent analysis.
+
+The tech stack recommendation is somewhat fixed — nearly every test defaulted to "React + Express.js + TypeScript." The React Native user got the same stack. There's no stack variability based on project type or user technical context.
+
+The Starter HTML and CSS are boilerplate-good but not project-specific. Every generated project gets the same CSS variable names, the same grid structure, the same `.service-card` class. The CSS doesn't adapt to the brand. A nonprofit and a SaaS startup get the same visual skeleton.
+
+---
+
+## Evaluation Area 5: Product Readiness
+
+**Score: 7 / 10**
+
+**Would freelancers, founders, entrepreneurs, consultants, nonprofit leaders, or small business owners find meaningful value today? Yes** — with some friction.
+
+A freelance designer who wants a head start on a client project would extract real value from the build prompt. The Starter HTML/CSS alone saves 45–90 minutes of scaffolding. The SEO pack alone is worth time. The copy — especially for service businesses — is serviceable and often good. The content checklist is practical and often overlooked.
+
+A technical founder building a SaaS MVP would find the Application Requirements section thoughtful and well-structured. The section telling the AI agent how to handle data persistence, auth, and CRUD flows is genuinely useful.
+
+A nonprofit leader with no technical background would benefit from having the platform detect "we need a Grants/Partners page" without them knowing to ask for it.
+
+**Would they use it again?** Probably, if the first output was good enough to act on. The risk is that after generating the prompt, some users won't know what to do next — the handoff to an AI coding agent is still the user's responsibility.
+
+**Would they pay for it?** The current build prompt quality is approaching the threshold where a founder pre-product would pay $15–29/month. It is not yet at the quality level where a funded startup would choose it over a product agency briefing, but that isn't the market. For individual builders, it's approaching paid-tier readiness.
+
+**Would it save them time?** Yes — consistently. Even in worst-case scenarios, the form auto-population alone saves 20–30 minutes of form-filling. The full output saves considerably more.
+
+**Primary friction today:** There is no session persistence visible to the user (beyond a local draft system). The UI has leftover data from previous projects in edge cases. The draft label showed "Marcus Piper Coaching" during testing — a vestige of a previous session — which creates a moment of confusion for new users. The "New Project" flow requiring a confirmation dialog is appropriate but slightly disruptive.
+
+---
+
+## Product Vision Alignment
+
+**Current Classification: B-to-C — Primarily a Project Planning Assistant trending toward an Intent Miner**
+
+LaunchFrame is not a form generator. The form is incidental — it's an intermediate representation, not the product. The product is the brain dump analysis and the resulting build prompt.
+
+But it is also not yet a full **intent miner** as defined in the vision. A true intent miner would do the following things that LaunchFrame does not currently do:
+
+1. Ask clarifying questions conversationally before generating
+2. Challenge the user's framing when it's confused or contradictory
+3. Identify unstated assumptions and surface them explicitly to the user
+4. Make the gap-resolution interactive, not just advisory
+5. Generate multiple interpretations of ambiguous intent and let the user choose
+
+What LaunchFrame actually does is closer to **deep structural analysis + structured synthesis + professional output generation.** It reads the dump thoroughly, makes intelligent inferences, flags gaps, populates fields intelligently, and produces a prompt that would genuinely give an AI agent a head start. That is more than a form — it's partial intent mining — but the mining is one-directional. It observes and outputs. It doesn't yet converse, challenge, or guide.
+
+---
+
+## Strengths
+
+**1. Domain-aware inference.** The system doesn't treat all projects the same. A nonprofit gets "Grants/Partners page" suggestions. A marketplace gets "Stripe Connect" specifics. A local business gets Google Business Profile recommendations. This is domain intelligence, not generic form logic.
+
+**2. Honest about gaps.** The "Still needed" category (seen in the mobile app and marketplace tests) is a sign of epistemic integrity. The system doesn't hallucinate a business name when one isn't provided.
+
+**3. Copy quality is competitive.** Hero headlines like "From Proposal to Payment, in One Place" and "Bring Handmade Food to More Tables" are creative, relevant, and punchy. They're not placeholder text.
+
+**4. The Notes field carries reasoning forward.** The AI's own reasoning and assumptions are stored in the Notes field and embedded in the prompt. This is architecturally elegant — the agent sees the designer's thinking, not just the decision.
+
+**5. Gap list is inserted into the prompt.** The "Recommendations to Address" section in the prompt means the coding agent knows what decisions were left open. This is very smart — most output tools drop the uncertainty entirely.
+
+**6. Output is genuinely comprehensive.** The Supporting Reference section (SEO pack, HTML/CSS scaffold, content checklist, navigation plan) turns one brain dump into a full pre-build document. This is real time savings.
+
+**7. Two-speed UX works well.** "Review & fill form" for thoughtful users, "Auto-build prompt" for fast ones. Both are useful.
+
+**8. Correctly distinguishes software from brochure sites.** This is a foundational decision that many project tools get wrong. LaunchFrame consistently generates app-grade requirements for SaaS/app projects and marketing-site requirements for service businesses.
+
+---
+
+## Weaknesses
+
+**1. No interactive gap resolution.** Suggestions are read-only. Users can see what's missing but can't answer the questions within the product. This breaks the feedback loop at the most critical moment.
+
+**2. Brand Tone and CTA are dropdown-constrained.** Nuanced human expression ("modern, clean, not corporate") is flattened into a pre-set option. These should at minimum accept free-text input alongside the select.
+
+**3. Tech stack has limited variability.** React + Express + TypeScript is a sensible default but not always the right choice. A nonprofit with "limited budget, volunteers run everything" should probably be steered toward simpler static site tooling or a CMS like Webflow/Squarespace as an alternative. The system never asks about technical capacity or budget.
+
+**4. SEO keywords are weak.** Generated keywords describe features, not buyer intent. "User authentication and account management" is not how anyone searches for proposal software. This section underperforms relative to the rest of the prompt.
+
+**5. HTML/CSS scaffold is not project-specific.** The starter code uses identical CSS variable names, class names, and layout patterns for every project regardless of type, tone, or brand direction. It's a good generic scaffold but not tailored output.
+
+**6. No conversation.** The product is one-directional. The brain dump flows in, the analysis and prompt flow out. There is no back-and-forth, no guided refinement, no "before I build this, can you tell me one more thing."
+
+**7. No memory or project history.** There is one draft slot. Users cannot save multiple projects, compare versions, or return to a past session. This limits use for agencies or consultants running multiple projects simultaneously.
+
+**8. Subtitle mismatch.** The page subtitle says "Turn project details into a copy-ready build prompt for any AI coding agent" but the product is actually positioned around the brain dump, not project details. The headline undersells the core differentiator (intent mining from messy notes).
+
+**9. No onboarding or guided first use.** First-time users land on a blank textarea with placeholder copy. There's no guided first experience, example project to clone, or "see how it works" flow. The example in the placeholder (Bright Smile Dental) is good, but it's only a hint.
+
+**10. Output isn't actionable without an AI agent.** The product produces a prompt that must be pasted into another tool. For non-technical users, there's no guidance on what to do next — "paste this into Claude Code" assumes knowledge that many users don't have.
+
+---
+
+## Surprises
+
+**Positive surprise:** The brand name was correctly inferred from the user's email domain (carlos@greenscapeaz.com → GreenScape AZ). This is a level of reading comprehension that feels like a genuine intelligence layer, not parsing logic.
+
+**Positive surprise:** The system suggested a Grants/Partners page for the nonprofit without any prompting. That's genuinely strategic, not retrieved from a template.
+
+**Positive surprise:** "Stripe Connect" was suggested specifically for the marketplace (not just "Stripe"), demonstrating knowledge of marketplace-specific payment architecture.
+
+**Positive surprise:** The system made a sensible default decision for the life coach ("no blog for now to keep the build simple and budget-friendly") and disclosed the decision rather than silently making it. That's honesty in the output loop.
+
+**Negative surprise:** The SEO keywords were consistently weak — pulling from feature labels rather than buyer intent. Given how strong the rest of the output is, this section stands out as underdeveloped.
+
+**Neutral surprise:** The Starter HTML and CSS are complete and immediately usable, which is unexpectedly generous for a planning tool. Whether this is appropriate scope for the product is worth debating.
+
+**Confusing surprise:** The draft label showed "Marcus Piper Coaching" (a previously saved draft) on a fresh session, which is disorienting and may confuse new users who haven't saved anything.
+
+---
+
+## Product Vision Score
+
+**6.5 / 10**
+
+The product is meaningfully on-vision. It does transform messy thoughts into structured output. It does surface missing decisions. It does produce a build prompt that coding agents can use. The core mechanics work.
+
+But the gap between the current product and the stated vision is in the *depth of the mining*. The vision describes a tool that acts like a strategist. The current product acts more like a very intelligent intake form with strong analytical commentary. The commentary (Suggestions) is strategic. The generation is strong. But the *conversation* — the interrogation, the challenging, the collaborative refinement — is missing. The user speaks once and the machine responds once. A strategist would go at least three rounds.
+
+---
+
+## Current Maturity Stage
+
+**Stage 3 of 5: Functional but One-Directional**
+
+LaunchFrame has moved well past "form filler" and past "template selector." It has genuine AI understanding of intent. But it has not yet reached "interactive strategy session" or "autonomous product advisor." It occupies the space of a very fast, smart intake analyst who reads your notes, populates a form, identifies gaps, and hands you a document. That's valuable. It's not yet a product strategist in the fullest sense.
+
+---
+
+## Top 10 Improvements
+
+**1. Make gap resolution interactive.** The Suggestions list should have inline response fields. After analysis, the user should be able to click each suggestion and answer "yes/no" or type a quick answer before the prompt is generated. This turns a static checklist into a real dialogue and closes the loop on the most important missing element in the current flow.
+
+**2. Add a clarifying question round between brain dump and prompt generation.** After the analysis, before full generation, the system should ask 2–4 of the most important unanswered questions as a conversational step: "You mentioned you might call this ProposalKit — should I use that as the final name, or mark it as tentative?" This is the single biggest step toward becoming an intent miner.
+
+**3. Replace tone/CTA dropdowns with free-text + suggestion hybrid.** Allow users to type "modern, clean, not corporate" and use that as the actual tone instruction rather than snapping it to "Professional." Show suggestions, but don't constrain to them.
+
+**4. Fix SEO keyword generation.** Keywords should be derived from buyer intent, not feature names. Keyword generation should ask: "What would someone type into Google when searching for this product?" For ProposalKit, the answer is "proposal software for freelancers," not "user authentication and account management."
+
+**5. Add tech stack awareness based on user context.** If the user says "I have no backend experience" or "very limited budget," the system should suggest simpler stacks (static site + Netlify forms, or even Webflow/Carrd for small local businesses) instead of defaulting to React + Express. The stack recommendation should vary by user capability signal.
+
+**6. Introduce project history and multi-project management.** Replace the single-draft system with a named project list. Users should be able to save multiple projects, return to any of them, and see version history. This is essential for agencies and consultants.
+
+**7. Make the CSS/HTML scaffold project-specific.** Use brand tone, color keywords, and project type to generate a differentiated visual scaffold. A nonprofit should not get the same default color palette as a SaaS startup. At minimum, generate a color palette suggestion based on the brand tone description.
+
+**8. Add a "What to do next" step on the output page.** After generating the prompt, show three options: "Open Claude.ai and paste this prompt," "Open Cursor and start a project," "Download as Markdown file." Non-technical users need a bridge from the output to the action. Right now the product ends without a clear next step.
+
+**9. Fix the subtitle to surface the brain dump as the primary value.** Change "Turn project details into a copy-ready build prompt" to something that leads with the messy-notes-to-clarity transformation: "Turn your rough idea into a ready-to-build prompt — just dump your thoughts." This better represents the real differentiator.
+
+**10. Add a "See an Example" first-run experience.** New users should be able to click "See how it works" and watch a pre-loaded brain dump being analyzed and turned into a prompt — without needing to type anything first. This reduces friction on first contact and demonstrates the product's capability before the user commits to typing.
+
+---
+
+## What Should Be Built Next
+
+**The most important next build is the clarifying question layer.** Not a chatbot — a structured, post-analysis mini-dialogue. After "Review & fill form," present the top 3 unanswered questions as UI cards the user can respond to. Their answers update the form fields and refine the prompt. This single addition would move the product from "intent analysis" to "intent mining" in the truest sense.
+
+Second priority: **a lightweight project gallery / saved project system.** Right now, LaunchFrame is single-session by design. This makes it useful for one-time use but prevents returning users or agencies from building a workflow around it.
+
+Third priority: **a guided output handoff** — a short explainer on the output page that tells the user exactly how to use the prompt with specific agents (a "Use with Claude" button, a "Use with Cursor" button, etc.).
+
+---
+
+## Continue, Revise, or Rethink?
+
+**Continue and refine — but with one significant revision to the interaction model.**
+
+The current direction is correct. LaunchFrame is genuinely on the path toward the vision. The AI layer is real and working. The output quality is legitimately useful. The product instinct is sound.
+
+The revision needed is not architectural — it's behavioral. LaunchFrame should begin to talk back. Right now it listens (brain dump), thinks (analysis), and speaks (prompt). The missing step is *asking*. Add one conversational round — 2 to 4 strategic questions after the analysis — and the product crosses the line from "project planning assistant" to "intent miner" in a way users would immediately feel and value.
+
+The vision is achievable from the current codebase. This is not a rethink. It is a refinement of a product that is already working.

@@ -1,0 +1,407 @@
+LaunchFrame · Phase 2 · Implementation Plan
+
+Task #16: Output Fidelity & Polish
+Five targeted changes that make the generated output more specific to each project — tone nuance, custom CTA, adaptive tech stack, buyer-intent SEO, and brand-matched CSS.
+
+Prerequisite — Task #15 must be merged first
+This task modifies the same intent.ts and openapi.yaml files as #15. Start only after #15 is committed and merged.
+
+Files changed
+3 files
+spec → server → client
+New schema fields
+toneNuance
++ callToActionCustom
+New functions
+suggestTechStack
++ getBrandCSS (client)
+Existing structure
+Unchanged
+Only values change, not layout
+#	Change	File	What
+1	Tone nuance	spec server client	New toneNuance field flows from miner → copy prompt → build prompt
+2	Custom CTA	spec server client	New callToActionCustom field overrides enum CTA in copy and HTML scaffold
+3	Buyer-intent SEO	server	Copy generation system prompt updated — keywords are search phrases, not feature names
+4	Adaptive tech stack	server	suggestTechStack() fills empty stack from content signals in notes + goal
+5	Brand-adaptive CSS	client	getBrandCSS() maps tone to a palette + type + spacing suggestion in the build prompt
+Step 01
+openapi.yaml — Schema additions
+File: lib/api-spec/openapi.yaml. Two edits: add fields to ExtractedIntent, then add keywords to GeneratedCopy.
+
+1A Add two fields to the ExtractedIntent schema
+Find the ExtractedIntent schema in components/schemas. Add these two properties in the properties block — place toneNuance after tone, and callToActionCustom after callToAction.
+
+lib/api-spec/openapi.yaml — ExtractedIntent properties
+ADD BOTH FIELDS
+    # Insert after the `tone` property:
+    toneNuance:
+      type: string
+      description: >
+        Verbatim short phrase (3–8 words) capturing the user's specific tone language
+        beyond the constrained enum value, e.g. "modern, not corporate" or
+        "bold but approachable". Empty string when the user didn't specify.
+
+    # Insert after the `callToAction` property:
+    callToActionCustom:
+      type: string
+      description: >
+        Free-text CTA phrase when the user specifies something that doesn't match
+        a standard option, e.g. "Join the revolution". Takes precedence over
+        callToAction in copy generation and HTML scaffold output. Empty string
+        when nothing specific was said.
+Both fields are optional strings — do not add them to the required array. They default to empty string via asString() in normalizeIntent().
+
+1B Add keywords to the GeneratedCopy schema
+Find the GeneratedCopy schema. Add the keywords property inside properties and add keywords to its required array alongside the other fields.
+
+lib/api-spec/openapi.yaml — GeneratedCopy properties
+ADD
+    # Insert anywhere in the GeneratedCopy properties block:
+    keywords:
+      type: array
+      items:
+        type: string
+      description: >
+        4–6 buyer-intent search phrases a potential customer would type when
+        actively shopping for this solution. Derived from audience + offering +
+        locality. These are not feature names — they are search queries.
+      example:
+        - "proposal software for freelancers"
+        - "client onboarding tool for agencies"
+required array: Also add - keywords to the required list in GeneratedCopy so the Zod schema enforces it.
+1C Update the GenerateCopyResponse missing-field guard in intent.ts
+After adding keywords to the schema and regenerating, find the existing guard in the POST /intent/copy handler (around line 460) that checks for empty essential fields. Add result.keywords.length === 0 to the condition so an empty keywords array also triggers the 502 fallback path.
+
+artifacts/api-server/src/routes/intent.ts — ~line 460
+REPLACE
+// BEFORE:
+if (
+  !result.heroHeadline ||
+  !result.heroSubheadline ||
+  !result.about ||
+  !result.ctaCopy ||
+  !result.seoTitle ||
+  !result.metaDescription
+) {
+
+// AFTER:
+if (
+  !result.heroHeadline ||
+  !result.heroSubheadline ||
+  !result.about ||
+  !result.ctaCopy ||
+  !result.seoTitle ||
+  !result.metaDescription ||
+  result.keywords.length === 0
+) {
+Step 02
+Run code generation
+Terminal — workspace root
+RUN
+pnpm --filter @workspace/api-zod generate
+Confirm that toneNuance and callToActionCustom appear in the generated ExtractedIntent type, and that keywords appears in GeneratedCopy.
+
+Step 03
+intent.ts — Four targeted edits
+File: artifacts/api-server/src/routes/intent.ts. Changes 3A and 3B are simple additions; 3C adds a new function; 3D updates the copy generation system prompt.
+
+3A Update normalizeIntent() to include the two new fields
+The function is defined around line 80. Replace the entire return object with the version below — two lines added, everything else unchanged.
+
+artifacts/api-server/src/routes/intent.ts — normalizeIntent() ~line 80
+REPLACE RETURN OBJECT
+function normalizeIntent(raw: unknown): ExtractedIntent {
+  const obj = (raw ?? {}) as Record<string, unknown>;
+  return {
+    projectName:         asString(obj.projectName),
+    businessName:        asString(obj.businessName),
+    founderName:         asString(obj.founderName),
+    organizationType:    constrain(obj.organizationType, ORG_TYPES),
+    primaryGoal:         asString(obj.primaryGoal),
+    audience:            asString(obj.audience),
+    services:            asStringArray(obj.services),
+    pages:               asStringArray(obj.pages),
+    tone:                constrain(obj.tone, TONES),
+    toneNuance:          asString(obj.toneNuance),            // NEW
+    callToAction:        constrain(obj.callToAction, CTAS),
+    callToActionCustom:  asString(obj.callToActionCustom),    // NEW
+    technologyStack:     constrain(obj.technologyStack, TECH_STACKS),
+    contactEmail:        asString(obj.contactEmail),
+    contactPhone:        asString(obj.contactPhone),
+    notes:               asString(obj.notes),
+  };
+}
+3B Update the miner system prompt to extract toneNuance and callToActionCustom
+Find the system prompt string for the POST /intent handler (it instructs the AI to produce an ExtractedIntent JSON). Add these two instructions to the field-extraction section. Do not change any existing instruction.
+
+artifacts/api-server/src/routes/intent.ts — miner system prompt
+ADD TO FIELD INSTRUCTIONS
+// Add these two bullet points wherever the prompt lists the fields to extract.
+// Keep them adjacent to the `tone` and `callToAction` descriptions respectively.
+
+- toneNuance: A short verbatim phrase (3–8 words) capturing the user's specific
+  tone language beyond the constrained enum, e.g. "modern, not corporate" or
+  "bold but approachable". Capture exact language from the input. Use an empty
+  string if the user said nothing specific about style or vibe.
+
+- callToActionCustom: If the user specifies an exact CTA phrase that is
+  something other than a standard option (get a quote, book a call, etc.),
+  capture it verbatim here — e.g. "Join the revolution", "Start building today".
+  Use an empty string when no custom phrase was given.
+3C Add suggestTechStack() — adaptive tech stack signal detection
+Add this function before the POST /intent route handler (anywhere in the file above the handler, e.g. after the normalizeIntent block). Then wire it into the handler as shown below.
+
+artifacts/api-server/src/routes/intent.ts — add function, then wire into handler
+ADD FUNCTION + HANDLER EDIT
+// Signal-based tech stack suggestion.
+// Only fills an EMPTY technologyStack — never overrides an explicit user choice.
+// If notes or primaryGoal contain simplicity signals, lean toward lighter stacks.
+// Org-type defaults handle the common case where no signals are present.
+const SIMPLICITY_SIGNALS = [
+  "no backend", "no server", "no database", "no code", "no developer",
+  "simple", "basic", "beginner", "volunteers", "limited budget", "low budget",
+  "just html", "one page", "single page",
+];
+
+const ORG_SIMPLE_STACKS: Partial<Record<string, string>> = {
+  "nonprofit":                 "html-css-js",
+  "church/faith organization": "html-css-js",
+  "community project":         "html-css-js",
+  "local service business":    "html-css-js",
+  "restaurant/food":           "html-css-js",
+  "personal brand":            "html-css-js",
+};
+
+function suggestTechStack(intent: ExtractedIntent): string {
+  // Already filled — respect the explicit choice.
+  if (intent.technologyStack) return intent.technologyStack;
+
+  // Check for simplicity signals in the free-text fields.
+  const corpus = `${intent.notes} ${intent.primaryGoal}`.toLowerCase();
+  if (SIMPLICITY_SIGNALS.some((s) => corpus.includes(s))) return "html-css-js";
+
+  // Org-type default for non-technical audiences.
+  const orgDefault = ORG_SIMPLE_STACKS[intent.organizationType];
+  if (orgDefault) return orgDefault;
+
+  // Nothing matched — leave empty so the miner surfaces the tech stack question.
+  return "";
+}
+
+
+// ── In the POST /intent handler, around line 200 ────────────────────────
+// BEFORE this line:
+const intent = normalizeIntent(rawResult.intent);
+
+// REPLACE with:
+const rawIntent = normalizeIntent(rawResult.intent);
+const intent: ExtractedIntent = {
+  ...rawIntent,
+  technologyStack: suggestTechStack(rawIntent),
+};
+No TypeScript error: The spread + override pattern is safe because technologyStack is a string in ExtractedIntent and suggestTechStack always returns a string.
+3D Update the copy generation system prompt — three additions
+Find the system prompt for the POST /intent/copy handler (around lines 375–420). Make all three additions below — they can be appended at the end of the existing instructions or inserted next to their related field descriptions.
+
+artifacts/api-server/src/routes/intent.ts — copy generation system prompt
+ADD THREE INSTRUCTIONS
+// ── Addition 1: Tone nuance ──────────────────────────────────────────────
+// Insert near the existing tone instruction:
+
+- Tone: use `tone` as the category anchor. If `toneNuance` is non-empty, treat it
+  as a more specific override — "bold but approachable" should read warmer than
+  "bold" alone. Let toneNuance shape word choice, sentence rhythm, and energy
+  throughout all copy fields.
+
+
+// ── Addition 2: Custom CTA ──────────────────────────────────────────────
+// Insert near the existing ctaCopy instruction:
+
+- ctaCopy: if `callToActionCustom` is non-empty, use it verbatim as the
+  button label and CTA phrase. If `callToActionCustom` is empty, derive natural
+  copy from the `callToAction` enum value (e.g. "book a call" → "Book a Free Call").
+
+
+// ── Addition 3: Buyer-intent SEO keywords ───────────────────────────────
+// Add as a new field instruction (keywords is a new required field):
+
+- keywords: generate 4–6 buyer-intent search phrases a potential customer would
+  type when actively shopping for this solution. Derive phrases from: audience
+  + core service offering + geography or niche (when available in the intent).
+  Examples for a freelance proposal tool: "proposal software for freelancers",
+  "client proposal app for designers", "freelance invoice and proposal software".
+  Do NOT use feature names, technology terms, or company names as keywords.
+  Every phrase must read as something a real person would type into a search bar.
+Also update the copy generation user message to include toneNuance and callToActionCustom in the intent JSON passed to the model. If the user message is built with JSON.stringify(intent), no change is needed — the new fields will be included automatically after the normalizeIntent update in 3A.
+
+Finally, update the result construction block (~line 440) to include keywords:
+
+artifacts/api-server/src/routes/intent.ts — GeneratedCopy result ~line 440
+ADD keywords FIELD
+const result: GeneratedCopy = {
+  heroHeadline:    sanitizeCopy(rawResult.heroHeadline),
+  heroSubheadline: sanitizeCopy(rawResult.heroSubheadline),
+  about:           sanitizeCopy(rawResult.about),
+  features,
+  seoTitle:        sanitizeCopy(rawResult.seoTitle),
+  metaDescription: sanitizeCopy(rawResult.metaDescription),
+  ctaCopy:         sanitizeCopy(rawResult.ctaCopy),
+  keywords:        asStringArray(rawResult.keywords),   // NEW
+  source:          "ai",
+};
+Step 04
+home.tsx — Three targeted edits
+File: artifacts/launchframe/src/pages/home.tsx. Exact line numbers for the build prompt assembly aren't in the ingredient package — use the search terms provided to locate each section. All three changes are inside the build prompt string, not the UI structure.
+
+4A Brand Type & Tone section — add toneNuance
+Search for Brand Type & Tone or intent.tone inside the build prompt template string. Find the line that outputs the tone and update it to include toneNuance when present.
+
+artifacts/launchframe/src/pages/home.tsx — build prompt, Brand & Tone section
+REPLACE
+// BEFORE (exact wording may vary — match what's in the file):
+Brand Type & Tone: ${intent.organizationType} · ${intent.tone}
+
+// AFTER:
+Brand Type & Tone: ${intent.organizationType} · ${intent.tone}${
+  intent.toneNuance ? ` (${intent.toneNuance})` : ""
+}
+4B CTA section — use callToActionCustom when present
+Search for callToAction in the build prompt. There are likely two occurrences: one in the "Primary CTA" metadata line, and one in the HTML button text in the scaffold. Update both.
+
+artifacts/launchframe/src/pages/home.tsx — build prompt CTA (both occurrences)
+REPLACE BOTH
+// Helper — define once at the top of the build prompt assembly function:
+const effectiveCta = intent.callToActionCustom || intent.callToAction;
+
+// Then replace every ${intent.callToAction} in the prompt string with:
+${effectiveCta}
+
+// Example — metadata line:
+Primary CTA: ${effectiveCta}
+
+// Example — HTML scaffold button text:
+<button class="cta-button">${effectiveCta}</button>
+4C Brand-adaptive CSS scaffold — add getBrandCSS()
+Add this helper function as a module-level constant before the main page component. Then replace the hardcoded CSS variable suggestions in the build prompt scaffold with the adaptive values it returns.
+
+artifacts/launchframe/src/pages/home.tsx — add before main component
+ADD FUNCTION
+interface BrandCSS {
+  primary:      string;
+  accent:       string;
+  ground:       string;
+  radius:       string;
+  fontDisplay:  string;
+  fontBody:     string;
+}
+
+function getBrandCSS(tone: string): BrandCSS {
+  switch (tone) {
+    case "professional":
+      return {
+        primary:     "#2563EB",
+        accent:      "#1D4ED8",
+        ground:      "#F8FAFC",
+        radius:      "6px",
+        fontDisplay: "system-ui, sans-serif",
+        fontBody:    "system-ui, sans-serif",
+      };
+    case "bold":
+      return {
+        primary:     "#0F0F0F",
+        accent:      "#FF3300",
+        ground:      "#FFFFFF",
+        radius:      "2px",
+        fontDisplay: "system-ui, sans-serif",
+        fontBody:    "system-ui, sans-serif",
+      };
+    case "elegant":
+      return {
+        primary:     "#1B2A4A",
+        accent:      "#C9A84C",
+        ground:      "#FAFAF8",
+        radius:      "4px",
+        fontDisplay: "Georgia, serif",
+        fontBody:    "system-ui, sans-serif",
+      };
+    case "warm":
+      return {
+        primary:     "#C2400C",
+        accent:      "#F59E0B",
+        ground:      "#FFFBF5",
+        radius:      "12px",
+        fontDisplay: "system-ui, sans-serif",
+        fontBody:    "system-ui, sans-serif",
+      };
+    case "playful":
+      return {
+        primary:     "#7C3AED",
+        accent:      "#EC4899",
+        ground:      "#FAFAFA",
+        radius:      "16px",
+        fontDisplay: "system-ui, sans-serif",
+        fontBody:    "system-ui, sans-serif",
+      };
+    case "faith-based":
+      return {
+        primary:     "#1E3A8A",
+        accent:      "#D4A017",
+        ground:      "#FAFAF9",
+        radius:      "6px",
+        fontDisplay: "Georgia, serif",
+        fontBody:    "system-ui, sans-serif",
+      };
+    case "community-focused":
+      return {
+        primary:     "#059669",
+        accent:      "#0D9488",
+        ground:      "#F0FDF4",
+        radius:      "10px",
+        fontDisplay: "system-ui, sans-serif",
+        fontBody:    "system-ui, sans-serif",
+      };
+    default:
+      return {
+        primary:     "#2563EB",
+        accent:      "#1D4ED8",
+        ground:      "#F8FAFC",
+        radius:      "6px",
+        fontDisplay: "system-ui, sans-serif",
+        fontBody:    "system-ui, sans-serif",
+      };
+  }
+}
+Next, find the CSS variables block inside the build prompt's HTML scaffold. It currently has hardcoded hex values. Replace the entire block — search for --primary or :root inside the prompt string to locate it.
+
+artifacts/launchframe/src/pages/home.tsx — build prompt CSS variables block
+REPLACE CSS VARIABLES BLOCK
+// At the top of the build prompt assembly function, compute once:
+const brandCSS = getBrandCSS(intent.tone);
+
+// Then replace the :root block in the prompt string with:
+:root {
+  --primary:      ${brandCSS.primary};
+  --accent:       ${brandCSS.accent};
+  --ground:       ${brandCSS.ground};
+  --text:         #14181E;
+  --muted:        #6B7280;
+  --radius:       ${brandCSS.radius};
+  --font-display: ${brandCSS.fontDisplay};
+  --font-body:    ${brandCSS.fontBody};
+}
+Variable names stay the same. Only the suggested hex values and font strings change. Any CSS that the agent writes referencing --primary, --radius, etc. will automatically get the brand-matched values without any other change to the scaffold structure.
+Step 05
+Smoke test checklist
+Typecheck passes: pnpm tsc --noEmit from artifacts/launchframe/ — zero errors after adding getBrandCSS and using the new fields.
+toneNuance is captured: Mine a brain dump that says "modern, not corporate" or "bold but approachable." Inspect the mined intent — toneNuance should hold that phrase verbatim, not empty.
+toneNuance appears in build prompt: After mining, open the generated build prompt. The Brand & Tone line should show professional (modern, not corporate), not just professional.
+Custom CTA is captured: Mine with "Join the revolution" as the CTA. Check that callToActionCustom holds "Join the revolution" and the build prompt button uses it instead of a CTAS enum value.
+Enum CTA still works: Mine a brain dump that says "book a call." Confirm callToActionCustom is empty and callToAction is "book a call" — the build prompt button uses the enum value.
+Simplicity signal triggers html-css-js: Mine with "I have no backend experience." Confirm technologyStack is set to html-css-js even though the user didn't specify it.
+Explicit stack is not overridden: Mine with "use Next.js." Confirm technologyStack is nextjs — the signal detection does not override it.
+Brand-adaptive CSS: bold tone: Set tone to "bold." Open the build prompt — --primary should be #0F0F0F, --radius should be 2px.
+Brand-adaptive CSS: warm tone: Set tone to "warm." Confirm --primary is the orange value (#C2400C) and --radius is 12px.
+Buyer-intent keywords: Generate copy for a project with a clear audience (e.g., "proposal software for freelancers"). Inspect the response — keywords[] should contain search phrases like "proposal software for freelancers", not feature names like "AI proposal builder".
+Keywords fallback to 502: If the AI returns an empty keywords array (simulate by temporarily corrupting the prompt), the response should be a 502 and the client should fall back to template copy.
+Existing 18 unit tests still pass: pnpm test from artifacts/launchframe/ — all 18 tests green.
+LaunchFrame · Task #16 · Both tasks (#15 + #16) complete the Phase 2 sprint

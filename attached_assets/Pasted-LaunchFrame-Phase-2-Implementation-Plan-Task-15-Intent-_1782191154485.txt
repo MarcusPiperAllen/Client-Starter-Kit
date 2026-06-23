@@ -1,0 +1,687 @@
+LaunchFrame · Phase 2 · Implementation Plan
+
+Task #15: Intent Resolution Layer
+Full step-by-step instructions — exact file paths, line numbers, and function signatures. A Replit agent can execute this without re-reading the codebase.
+
+Sequencing — Do #15 before #16
+Both tasks touch intent.ts and openapi.yaml. Complete and commit #15 before opening #16. Running them in parallel will produce conflicts in both files.
+
+What changes
+4 files
+spec → gen → server → client
+New endpoint
+POST /intent/questions
+Returns ≤ 3 ranked questions
+UI change
+home.tsx : 558
+Replaces flat suggestions list
+Auto-build bypass
+Untouched
+Line 417 flow unchanged
+Step 01
+openapi.yaml — Add schemas and path
+File: lib/api-spec/openapi.yaml (271 lines). Add to components/schemas first, then add to paths. Both insertions go at the end of their respective sections.
+
+1A Add three schemas to components/schemas
+Insert the following block at the end of the schemas: section, before any closing paths: key.
+
+lib/api-spec/openapi.yaml — append to components/schemas
+ADD
+  ResolutionQuestion:
+    type: object
+    description: >
+      A ranked clarifying question generated from a partially-filled intent.
+      answerType determines which UI control to render.
+    properties:
+      id:
+        type: string
+        description: Stable kebab-case id, e.g. "q_businessName"
+      questionText:
+        type: string
+      rationale:
+        type: string
+        description: One sentence explaining why this gap matters for the build.
+      answerType:
+        type: string
+        enum: [boolean, single-select, multi-select, short-text]
+      options:
+        type: array
+        items:
+          type: string
+        nullable: true
+        description: Populated for boolean/single-select/multi-select types.
+      targetFields:
+        type: array
+        items:
+          type: string
+        description: Keys of ExtractedIntent to update when the question is answered.
+      priority:
+        type: string
+        enum: [architectural, content]
+    required:
+      - id
+      - questionText
+      - rationale
+      - answerType
+      - targetFields
+      - priority
+
+  ResolveQuestionsRequest:
+    type: object
+    properties:
+      intent:
+        $ref: "#/components/schemas/ExtractedIntent"
+      projectKind:
+        type: string
+        enum: [software, website]
+      suggestions:
+        type: array
+        items:
+          type: string
+      missingFields:
+        type: array
+        items:
+          type: string
+    required:
+      - intent
+      - projectKind
+      - suggestions
+      - missingFields
+
+  ResolveQuestionsResponse:
+    type: object
+    properties:
+      questions:
+        type: array
+        items:
+          $ref: "#/components/schemas/ResolutionQuestion"
+        maxItems: 3
+      source:
+        type: string
+        enum: [ai, fallback]
+    required:
+      - questions
+      - source
+1B Add the path to paths:
+Insert at the end of the paths: section, after the existing /intent/copy entry.
+
+lib/api-spec/openapi.yaml — append to paths
+ADD
+  /intent/questions:
+    post:
+      operationId: resolveQuestions
+      summary: Generate ranked clarifying questions from a mined intent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResolveQuestionsRequest"
+      responses:
+        "200":
+          description: >
+            Up to 3 ranked questions. source is "ai" or "fallback".
+            Always 200 — server runs deterministic fallback if AI fails.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResolveQuestionsResponse"
+        "400":
+          description: Invalid request body
+Step 02
+Run code generation
+Regenerate the Zod schemas and React Query hooks from the updated OpenAPI spec. This produces useResolveQuestions, ResolveQuestionsRequest, ResolveQuestionsResponse, and ResolutionQuestion in the generated output.
+
+2A Run orval from the workspace root
+Terminal — workspace root
+RUN
+pnpm --filter @workspace/api-zod generate
+If the filter doesn't match, check pnpm-workspace.yaml for the exact package name and substitute it. Alternatively, cd lib/api-zod && pnpm generate.
+
+Expected output: Orval will write new files or update existing ones under lib/api-zod/src/generated/. Confirm that ResolutionQuestion, ResolveQuestionsRequest, and ResolveQuestionsResponse now appear in the generated types directory before continuing.
+Step 03
+intent.ts — New route
+File: artifacts/api-server/src/routes/intent.ts (477 lines). The last line is export default router;. All four insertions go immediately before that final export — treat them as one contiguous block inserted at line 476 (after the last closing brace of the copy route).
+
+3A Local type alias for ResolutionQuestion
+Add this before export default router; at the bottom of the file. The generated Zod schema is the canonical source of truth; this alias is for use inside the handler.
+
+artifacts/api-server/src/routes/intent.ts — insert before line 477
+BEFORE EXPORT
+// ── Intent Resolution Layer ───────────────────────────────────────────────
+
+type RQAnswerType = "boolean" | "single-select" | "multi-select" | "short-text";
+type RQPriority  = "architectural" | "content";
+
+interface ResolutionQuestion {
+  id:           string;
+  questionText: string;
+  rationale:    string;
+  answerType:   RQAnswerType;
+  options?:     string[];
+  targetFields: string[];
+  priority:     RQPriority;
+}
+3B Priority map and deterministic fallback function
+Continue the block immediately after 3A. This uses the existing isFilled() (defined ~line 130) and ORG_TYPES, TONES, CTAS, TECH_STACKS constants already at the top of the file.
+
+artifacts/api-server/src/routes/intent.ts — continue block
+BEFORE EXPORT
+// Priority-ordered field → question template.
+// Architectural slots rank above content slots; within a rank, preserve this order.
+const FIELD_QUESTION_MAP: Partial<Record<keyof ExtractedIntent, Omit<ResolutionQuestion, "id">>> = {
+  organizationType: {
+    questionText: "What type of organization is this?",
+    rationale:    "Organization type drives the template, tone defaults, and build prompt structure.",
+    answerType:   "single-select",
+    options:      [...ORG_TYPES],
+    targetFields: ["organizationType"],
+    priority:     "architectural",
+  },
+  technologyStack: {
+    questionText: "What technology stack should this project use?",
+    rationale:    "The stack determines the starter code, build instructions, and complexity tier.",
+    answerType:   "single-select",
+    options:      [...TECH_STACKS],
+    targetFields: ["technologyStack"],
+    priority:     "architectural",
+  },
+  primaryGoal: {
+    questionText: "What is the main goal of this project?",
+    rationale:    "The primary goal anchors the hero headline, meta description, and build prompt.",
+    answerType:   "short-text",
+    targetFields: ["primaryGoal"],
+    priority:     "architectural",
+  },
+  businessName: {
+    questionText: "What should we call this business or project?",
+    rationale:    "The name appears in the hero, SEO title, footer, and prompt header.",
+    answerType:   "short-text",
+    targetFields: ["businessName", "projectName"],
+    priority:     "content",
+  },
+  tone: {
+    questionText: "What tone should the website use?",
+    rationale:    "Tone shapes copy style, CSS palette selection, and brand voice.",
+    answerType:   "single-select",
+    options:      [...TONES],
+    targetFields: ["tone"],
+    priority:     "content",
+  },
+  callToAction: {
+    questionText: "What should the primary call to action be?",
+    rationale:    "The CTA appears on every hero button, email, and closing section.",
+    answerType:   "single-select",
+    options:      [...CTAS],
+    targetFields: ["callToAction"],
+    priority:     "content",
+  },
+  audience: {
+    questionText: "Who is the primary audience for this project?",
+    rationale:    "Audience language and pain points shape the hero copy and feature descriptions.",
+    answerType:   "short-text",
+    targetFields: ["audience"],
+    priority:     "content",
+  },
+  contactEmail: {
+    questionText: "What email address should visitors use to reach out?",
+    rationale:    "Contact email appears in the footer, contact section, and mailto links.",
+    answerType:   "short-text",
+    targetFields: ["contactEmail"],
+    priority:     "content",
+  },
+};
+
+// Walk fields in priority order; add a question for each that is empty in intent.
+// If suggestions contain architectural signals (auth, payments, roles) and a slot
+// remains, surface the top matching suggestion as a boolean question.
+function buildFallbackQuestions(
+  intent: ExtractedIntent,
+  suggestions: string[],
+): ResolutionQuestion[] {
+  const PRIORITY_ORDER: Array<keyof ExtractedIntent> = [
+    "organizationType", "technologyStack", "primaryGoal",
+    "businessName", "tone", "callToAction", "audience", "contactEmail",
+  ];
+
+  const questions: ResolutionQuestion[] = [];
+
+  for (const field of PRIORITY_ORDER) {
+    if (questions.length >= 3) break;
+    if (isFilled(intent, field)) continue;
+    const template = FIELD_QUESTION_MAP[field];
+    if (!template) continue;
+    questions.push({ id: `q_${field}`, ...template });
+  }
+
+  // Fill remaining slots from architectural suggestions.
+  if (questions.length < 3) {
+    const archSignals = ["auth", "login", "payment", "pricing", "role", "account", "database"];
+    for (const suggestion of suggestions.slice(0, 3)) {
+      if (questions.length >= 3) break;
+      if (archSignals.some((s) => suggestion.toLowerCase().includes(s))) {
+        questions.push({
+          id:           `q_suggestion_${questions.length}`,
+          questionText: suggestion,
+          rationale:    "This architectural decision affects the build prompt and starter code scaffolding.",
+          answerType:   "boolean",
+          options:      ["Yes, include this", "No, skip for now"],
+          targetFields: ["notes"],
+          priority:     "architectural",
+        });
+      }
+    }
+  }
+
+  return questions;
+}
+3C AI system prompt constant
+Continue the block immediately after 3B.
+
+artifacts/api-server/src/routes/intent.ts — continue block
+BEFORE EXPORT
+const QUESTIONS_SYSTEM_PROMPT = `\
+You are a project intake strategist for a web agency builder tool.
+You receive a partially-filled project brief and identify the 1–3 most impactful gaps
+to resolve before a developer can build the project.
+
+Rank by impact:
+  1. ARCHITECTURAL (highest): authentication, user accounts, payments, pricing tiers,
+     user roles, database needs, external API integrations, MVP scope decisions.
+  2. CONTENT (lower): missing business name, contact info, tone, CTA wording.
+
+Rules:
+- NEVER ask about a field already filled in the intent JSON.
+- Cap at 3 questions. Prefer fewer high-impact questions over padding with low-value ones.
+- For constrained fields, include the allowed options exactly as listed below.
+- targetFields must be valid ExtractedIntent keys:
+    projectName, businessName, founderName, organizationType, primaryGoal,
+    audience, services, pages, tone, callToAction, technologyStack,
+    contactEmail, contactPhone, notes
+- Boolean questions (architectural decisions) use options ["Yes, include this", "No, skip for now"]
+  and targetFields: ["notes"] — the answer will be appended to notes.
+
+Allowed values for constrained fields:
+  organizationType: ${ORG_TYPES.join(", ")}
+  tone:             ${TONES.join(", ")}
+  callToAction:     ${CTAS.join(", ")}
+  technologyStack:  ${TECH_STACKS.join(", ")}
+
+Return valid JSON only — no commentary, no markdown fences:
+{
+  "questions": [
+    {
+      "id": "q_fieldName",
+      "questionText": "...",
+      "rationale": "One sentence: why this gap matters for the build.",
+      "answerType": "boolean" | "single-select" | "multi-select" | "short-text",
+      "options": ["..."] or null,
+      "targetFields": ["fieldKey"],
+      "priority": "architectural" | "content"
+    }
+  ]
+}`;
+3D Route handler — POST /intent/questions
+Continue the block after 3C. Use the same Anthropic client instance already in use by the POST /intent and POST /intent/copy handlers above — do not re-import it. Replace MODEL_CONSTANT with whatever model variable/string the rest of the file uses.
+
+artifacts/api-server/src/routes/intent.ts — continue block
+BEFORE EXPORT
+router.post(
+  "/questions",
+  async (req: Request, res: Response): Promise<void> => {
+    // Validate request body against the generated Zod schema.
+    const parseResult = ResolveQuestionsRequest.safeParse(req.body);
+    if (!parseResult.success) {
+      res.status(400).json({ error: "Invalid request body", issues: parseResult.error.issues });
+      return;
+    }
+    const { intent, projectKind, suggestions, missingFields } = parseResult.data;
+
+    let questions: ResolutionQuestion[];
+    let source: "ai" | "fallback" = "ai";
+
+    try {
+      const userMessage = JSON.stringify(
+        { intent, projectKind, suggestions, missingFields },
+        null,
+        2,
+      );
+
+      const response = await anthropic.messages.create({
+        model:      MODEL_CONSTANT,   // <-- use the same model variable as the rest of the file
+        max_tokens: 1024,
+        system:     QUESTIONS_SYSTEM_PROMPT,
+        messages:   [{ role: "user", content: userMessage }],
+      });
+
+      const text = response.content[0]?.type === "text" ? response.content[0].text : "";
+      // Strip markdown code fences if the model wraps the JSON.
+      const stripped = text.replace(/```(?:json)?/g, "").trim();
+      const jsonMatch = stripped.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error("No JSON object in AI response");
+
+      const parsed = JSON.parse(jsonMatch[0]);
+      const rawQuestions: unknown[] = Array.isArray(parsed.questions) ? parsed.questions : [];
+
+      // Normalize; reject any question that is missing required fields.
+      questions = rawQuestions
+        .slice(0, 3)
+        .map((q, i): ResolutionQuestion | null => {
+          if (!q || typeof q !== "object") return null;
+          const obj = q as Record<string, unknown>;
+          const answerType = asString(obj.answerType);
+          const valid: RQAnswerType[] = ["boolean", "single-select", "multi-select", "short-text"];
+          if (!valid.includes(answerType as RQAnswerType)) return null;
+          const targetFields = asStringArray(obj.targetFields);
+          if (!targetFields.length) return null;
+          const questionText = asString(obj.questionText);
+          if (!questionText) return null;
+          return {
+            id:           asString(obj.id) || `q_ai_${i}`,
+            questionText,
+            rationale:    asString(obj.rationale),
+            answerType:   answerType as RQAnswerType,
+            options:      Array.isArray(obj.options)
+                            ? (obj.options as unknown[]).map(asString).filter(Boolean)
+                            : undefined,
+            targetFields,
+            priority:     asString(obj.priority) === "architectural" ? "architectural" : "content",
+          };
+        })
+        .filter((q): q is ResolutionQuestion => q !== null);
+
+      if (questions.length === 0) throw new Error("AI returned no valid questions");
+    } catch (err) {
+      req.log.warn({ err }, "questions: AI failed — using deterministic fallback");
+      questions = buildFallbackQuestions(intent, suggestions);
+      source = "fallback";
+    }
+
+    const validated = ResolveQuestionsResponse.parse({ questions, source });
+    res.json(validated);
+  },
+);
+Import check: Confirm that ResolveQuestionsRequest and ResolveQuestionsResponse are imported at the top of the file from the generated Zod schemas (same pattern as MineIntentResponse and GenerateCopyResponse already used above). Add them to the existing import if they aren't there yet.
+Step 04
+home.tsx — UI changes
+File: artifacts/launchframe/src/pages/home.tsx (2,497 lines). Six targeted edits — four state changes, one JSX replacement, one new component. The auto-build path at line 417 is not touched.
+
+4A Update import at line 10
+artifacts/launchframe/src/pages/home.tsx — line 10
+REPLACE
+// BEFORE:
+import { useMineIntent, useGenerateCopy, type GeneratedCopy } from "@workspace/api-client-react";
+
+// AFTER:
+import {
+  useMineIntent,
+  useGenerateCopy,
+  useResolveQuestions,
+  type GeneratedCopy,
+  type ResolutionQuestion,
+} from "@workspace/api-client-react";
+4B Add state and mutation — after line 207 (after const mineMutation = useMineIntent();)
+artifacts/launchframe/src/pages/home.tsx — insert after line 207
+ADD
+const [resolutionQuestions, setResolutionQuestions]     = useState<ResolutionQuestion[]>([]);
+const [answeredQuestionIds, setAnsweredQuestionIds]     = useState<Set<string>>(new Set());
+const resolveQuestionsMutation                          = useResolveQuestions();
+4C Reset resolution state on clear / new project — lines 237, 250, 280, 294
+At each location where setMineMeta(null) is called, add two lines immediately after it:
+
+artifacts/launchframe/src/pages/home.tsx — lines 237, 250, 280, 294 (×4)
+ADD AFTER EACH setMineMeta(null)
+setResolutionQuestions([]);
+setAnsweredQuestionIds(new Set());
+4D Trigger question fetch after mine success — lines 347 and 401
+At each location where setMineMeta(meta); is called (lines 347 and 401), add the following block immediately after. This fires a parallel request — it does not block the review panel from showing. The auto-build path at line 417 calls enterOutput() immediately after, so even if meta is set at 401 first, the resolution panel never renders in that flow.
+
+artifacts/launchframe/src/pages/home.tsx — after lines 347 and 401
+ADD (×2)
+if (meta.missingFields.length > 0 || meta.suggestions.length > 0) {
+  resolveQuestionsMutation.mutate(
+    {
+      intent:       target,
+      projectKind:  meta.projectKind,
+      suggestions:  meta.suggestions,
+      missingFields: meta.missingFields,
+    },
+    {
+      onSuccess: (data) => setResolutionQuestions(data.questions),
+      onError:   ()     => setResolutionQuestions([]),
+    },
+  );
+}
+Variable name: target refers to the fully-resolved ExtractedIntent at the point of calling — use whatever variable holds the final intent at each call site. At line 347 it is the form intent after manual review; at line 401 it is the intent from the mine result.
+4E Replace the suggestions list at line 558
+This is the core UI swap. The existing block (lines ~552–558) renders <ul> {mineMeta.suggestions.map(...)}</ul>. Replace the entire condition block with the following. The old suggestions list stays as a fallback for when questions are unavailable.
+
+artifacts/launchframe/src/pages/home.tsx — replaces lines ~552–558
+REPLACE
+{(() => {
+  const unanswered = resolutionQuestions.filter(
+    (q) => !answeredQuestionIds.has(q.id)
+  );
+  if (unanswered.length > 0) {
+    return (
+      <ResolutionStep
+        questions={unanswered}
+        onAnswer={(questionId, targetFields, value) => {
+          targetFields.forEach((field) => {
+            const key = field as keyof ExtractedIntent;
+            if (Array.isArray(value)) {
+              // multi-select — use your form's array-field setter
+              setValue(key as any, value);
+            } else if (typeof value === "boolean") {
+              // boolean — append flag to notes
+              const existing = getValues?.("notes") ?? "";
+              setValue(
+                "notes" as any,
+                existing ? `${existing}; ${questionId}: ${value ? "yes" : "no"}` : `${questionId}: ${value ? "yes" : "no"}`
+              );
+            } else {
+              // short-text or single-select string
+              setValue(key as any, value);
+            }
+          });
+          setAnsweredQuestionIds((prev) => new Set([...prev, questionId]));
+        }}
+        onSkip={(questionId) =>
+          setAnsweredQuestionIds((prev) => new Set([...prev, questionId]))
+        }
+        onSkipAll={() =>
+          setAnsweredQuestionIds(
+            new Set(resolutionQuestions.map((q) => q.id))
+          )
+        }
+      />
+    );
+  }
+  if (mineMeta.suggestions.length > 0) {
+    return (
+      <ul className="list-disc pl-4 space-y-0.5 text-muted-foreground">
+        {mineMeta.suggestions.map((s, i) => (
+          <li key={i}>{s}</li>
+        ))}
+      </ul>
+    );
+  }
+  return null;
+})()}
+Form state: The handler calls setValue / getValues. If the form uses react-hook-form, destructure those from useForm() at the top of the component. If the form uses plain useState with a setIntent function, replace the setValue calls with setIntent(prev => ({'{'} ...prev, [field]: value {'}'})) and remove the getValues reference.
+4F Add the ResolutionStep component
+Add this as a module-level function, before the main page component definition. It has its own local state for in-progress short-text and multi-select values — those are transient and don't belong in the parent.
+
+artifacts/launchframe/src/pages/home.tsx — add before the main component
+ADD
+interface ResolutionStepProps {
+  questions:  ResolutionQuestion[];
+  onAnswer:   (id: string, targetFields: string[], value: string | string[] | boolean) => void;
+  onSkip:     (id: string) => void;
+  onSkipAll:  () => void;
+}
+
+function ResolutionStep({ questions, onAnswer, onSkip, onSkipAll }: ResolutionStepProps) {
+  const [shortText,    setShortText]    = useState<Record<string, string>>({});
+  const [multiSelect,  setMultiSelect]  = useState<Record<string, string[]>>({});
+
+  return (
+    <div className="space-y-3">
+      {questions.map((q) => (
+        <div
+          key={q.id}
+          className="rounded-lg border border-border bg-card p-3 space-y-2"
+        >
+          {/* Header row: question + skip */}
+          <div className="flex items-start justify-between gap-2">
+            <div className="space-y-0.5">
+              <p className="text-sm font-medium leading-snug">{q.questionText}</p>
+              <p className="text-xs text-muted-foreground">{q.rationale}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => onSkip(q.id)}
+              className="shrink-0 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+            >
+              Skip
+            </button>
+          </div>
+
+          {/* boolean */}
+          {q.answerType === "boolean" && (
+            <div className="flex gap-2">
+              {(q.options ?? ["Yes", "No"]).map((opt, i) => (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => onAnswer(q.id, q.targetFields, i === 0)}
+                  className="rounded-md border border-border px-3 py-1 text-xs font-medium
+                             hover:bg-accent hover:text-accent-foreground transition-colors"
+                >
+                  {opt}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* single-select */}
+          {q.answerType === "single-select" && q.options && (
+            <div className="flex flex-wrap gap-1.5">
+              {q.options.map((opt) => (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => onAnswer(q.id, q.targetFields, opt)}
+                  className="rounded-full border border-border px-2.5 py-0.5 text-xs
+                             capitalize hover:bg-primary hover:text-primary-foreground
+                             transition-colors"
+                >
+                  {opt}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* multi-select */}
+          {q.answerType === "multi-select" && q.options && (
+            <div className="space-y-2">
+              <div className="flex flex-wrap gap-1.5">
+                {q.options.map((opt) => {
+                  const selected = (multiSelect[q.id] ?? []).includes(opt);
+                  return (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() =>
+                        setMultiSelect((prev) => {
+                          const cur = prev[q.id] ?? [];
+                          return {
+                            ...prev,
+                            [q.id]: selected ? cur.filter((v) => v !== opt) : [...cur, opt],
+                          };
+                        })
+                      }
+                      className={`rounded-full border px-2.5 py-0.5 text-xs capitalize
+                        transition-colors ${selected
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border hover:bg-accent"}`}
+                    >
+                      {opt}
+                    </button>
+                  );
+                })}
+              </div>
+              {(multiSelect[q.id]?.length ?? 0) > 0 && (
+                <button
+                  type="button"
+                  onClick={() => onAnswer(q.id, q.targetFields, multiSelect[q.id] ?? [])}
+                  className="text-xs font-medium text-primary hover:underline"
+                >
+                  Confirm ({multiSelect[q.id]?.length ?? 0} selected)
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* short-text */}
+          {q.answerType === "short-text" && (
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={shortText[q.id] ?? ""}
+                onChange={(e) =>
+                  setShortText((prev) => ({ ...prev, [q.id]: e.target.value }))
+                }
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && shortText[q.id]?.trim()) {
+                    onAnswer(q.id, q.targetFields, shortText[q.id].trim());
+                  }
+                }}
+                placeholder="Type your answer…"
+                className="flex-1 rounded-md border border-border bg-background px-2 py-1
+                           text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+              <button
+                type="button"
+                disabled={!shortText[q.id]?.trim()}
+                onClick={() => {
+                  if (shortText[q.id]?.trim()) {
+                    onAnswer(q.id, q.targetFields, shortText[q.id].trim());
+                  }
+                }}
+                className="rounded-md bg-primary px-2.5 py-1 text-xs font-medium
+                           text-primary-foreground disabled:opacity-40"
+              >
+                Save
+              </button>
+            </div>
+          )}
+        </div>
+      ))}
+
+      <button
+        type="button"
+        onClick={onSkipAll}
+        className="text-xs text-muted-foreground underline underline-offset-2
+                   hover:text-foreground"
+      >
+        Skip all &amp; build anyway
+      </button>
+    </div>
+  );
+}
+Step 05
+Smoke test checklist
+Verify these before committing. Check each one manually — type errors alone won't catch UI state bugs.
+
+Typecheck passes: Run pnpm tsc --noEmit from artifacts/launchframe/. Zero errors.
+Generated types exist: Confirm useResolveQuestions and ResolutionQuestion appear in lib/api-zod/src/generated/ after code gen.
+Questions appear after mine: Paste a vague brain dump that leaves organizationType and primaryGoal empty. After mine, the analysis panel should show question cards (not the old bullet list).
+Answering a single-select updates the form: Answer the organizationType question. Open the form and confirm the field is now set to the selected value.
+Skip dismisses the card: Click Skip on one card — it disappears. Remaining cards stay.
+"Skip all" clears the panel: Click "Skip all & build anyway" — all cards disappear. If suggestions exist they re-appear as the old bullet list.
+Clear / New Project resets questions: Start a new project — no stale question cards from the previous session remain.
+Auto-build bypass untouched: Use the Auto-build button (line 417 path). Confirm it goes directly to output without showing the resolution panel.
+AI fallback works: Temporarily disconnect the Anthropic API (or pass a bad key). Confirm the endpoint still returns questions (deterministic fallback), no 502 error.
+Fully-filled intent shows no questions: Paste a detailed brain dump that fills all essential fields. After mine, no question cards should appear (all fields filled, nothing to resolve).
+LaunchFrame · Task #15 · Build #16 after this is merged
