@@ -2082,7 +2082,7 @@ function OutputView({
   // --- SEO Starter Pack ---
   const getSeoPack = (): string => {
     const schemaType = seoSchemaType;
-    const keywords = seoKeywords;
+    const keywords = (copy?.keywords?.length ?? 0) > 0 ? copy!.keywords : seoKeywords;
 
     const emailOrUrl = email ? `"email": "${email}"` : `"url": "[Add website URL]"`;
     const addressOrUrl = location
@@ -2139,8 +2139,46 @@ ${keywords.length > 0 ? keywords.map((k, i) => `${i + 1}. ${k}`).join("\n") : "1
     "community-focused": { primary: "#059669", hover: "#047857", bg: "#f0fdf4", text: "#052e16", muted: "#4b5563", darkBg: false },
   };
   const c = colorByTone[toneDisplay] ?? colorByTone.professional;
-  const headerBg = c.darkBg ? "#1e293b" : "#ffffff";
-  const navLinkColor = c.darkBg ? "#e2e8f0" : c.muted;
+
+  // --- Tone-nuance visual modifier ---
+  // toneNuance is free text (e.g. "dark luxury minimal"). We scan for
+  // known modifier keywords and nudge the scaffold palette so the
+  // starter CSS reflects the nuance, not just the base preset tone.
+  // Rule: nuance is a modifier — it shifts, never replaces, the preset.
+  const nuanceLow = toneNuance?.toLowerCase() ?? "";
+  const isDarkNuance = /\bdark\b|\bluxury\b|\bdark-mode\b/.test(nuanceLow);
+  const isMinimalNuance = /\bminimal\b|\bminimalist\b|\bclean\b/.test(nuanceLow);
+  const isEnergeticNuance = /\benerget\b|\bbold\b|\bvibrant\b|\bbright\b/.test(nuanceLow);
+  const isWarmNuance = /\bwarm\b|\bfriendly\b|\bcozy\b/.test(nuanceLow);
+
+  // Apply modifier: shallow override of the base palette entry.
+  const cm = isDarkNuance
+    ? { ...c, bg: "#0f172a", text: "#f1f5f9", muted: "#94a3b8", darkBg: true }
+    : isMinimalNuance
+    ? { ...c, bg: "#fafafa", muted: "#9ca3af" }
+    : isEnergeticNuance
+    ? { ...c, primary: c.primary, hover: c.hover }
+    : isWarmNuance
+    ? { ...c, bg: "#fffbf5" }
+    : c;
+
+  // nuanceScaffoldNote is injected into Styling & Tone Guidance in the build
+  // prompt so the coding agent knows nuance should affect the scaffold visuals.
+  const nuanceScaffoldNote = toneNuance
+    ? `\n- Tone nuance "${toneNuance}": ${
+        isDarkNuance
+          ? "Use a dark background (#0f172a or similar), light text, and gold or cool accent highlights."
+          : isMinimalNuance
+          ? "Maximize whitespace, reduce visual noise — thin borders, minimal shadow, monochrome where possible."
+          : isEnergeticNuance
+          ? "Push contrast higher, use bolder CTA colors, consider slightly larger headings."
+          : isWarmNuance
+          ? "Warm off-white background, softer card borders, approachable rounded corners."
+          : "Let this nuance guide copy tone, whitespace, and visual energy beyond the base preset."
+      }`
+    : "";
+  const headerBg = cm.darkBg ? "#1e293b" : "#ffffff";
+  const navLinkColor = cm.darkBg ? "#e2e8f0" : cm.muted;
 
   // --- Project-kind framing & gap-filling guidance (T007) ---
   // The prompt must be self-sufficient: where the intake left essentials blank,
@@ -2227,7 +2265,7 @@ ${ctaDraft}
 ${techStackInstructions}
 
 ## Styling & Tone Guidance
-- Visual tone: ${toneDisplay}
+- Visual tone: ${toneDisplay}${nuanceScaffoldNote}
 - Suggested font family: ${font.family}
 - Suggested colors: primary ${c.primary} (hover ${c.hover}), background ${c.bg}, text ${c.text}, muted ${c.muted}
 - Use generous spacing, clear visual hierarchy, and consistent styling across all sections.
@@ -2348,12 +2386,12 @@ ${extraSections.length > 0 ? extraSections.map(item => `
 
   // --- Starter CSS ---
   const cssDraft = `:root {
-    --primary: ${c.primary};
-    --primary-hover: ${c.hover};
-    --bg: ${c.bg};
-    --text: ${c.text};
-    --muted: ${c.muted};
-    --card-bg: #ffffff;
+    --primary: ${cm.primary};
+    --primary-hover: ${cm.hover};
+    --bg: ${cm.bg};
+    --text: ${cm.text};
+    --muted: ${cm.muted};
+    --card-bg: ${cm.darkBg ? "#1e293b" : "#ffffff"};
     --font: ${font.family};
 }
 
@@ -2432,7 +2470,7 @@ header {
 .hero {
     padding: 7rem 0;
     text-align: center;
-    background: ${c.darkBg ? "#1e293b" : "var(--card-bg)"};
+    background: ${cm.darkBg ? "#1e293b" : "var(--card-bg)"};
 }
 
 .hero h1 {
