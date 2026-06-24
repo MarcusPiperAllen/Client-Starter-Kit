@@ -37,6 +37,42 @@ describe("splitList", () => {
   it("handles a single item with surrounding whitespace", () => {
     expect(splitList("  Tax Consulting  ")).toEqual(["Tax Consulting"]);
   });
+
+  it("strips leading 'and' from the last item of an Oxford-comma list", () => {
+    expect(splitList("allergens, serving sizes, pickup times, and pricing")).toEqual([
+      "allergens",
+      "serving sizes",
+      "pickup times",
+      "pricing",
+    ]);
+  });
+
+  it("strips leading 'or' from the last item of an or-terminated list", () => {
+    expect(splitList("phone, email, or contact form")).toEqual([
+      "phone",
+      "email",
+      "contact form",
+    ]);
+  });
+
+  it("does not mutate words that start with 'and' or 'or' mid-word", () => {
+    expect(splitList("android app, order management, ongoing support")).toEqual([
+      "android app",
+      "order management",
+      "ongoing support",
+    ]);
+  });
+
+  it("strips 'and' prefix when clause starts with 'and'", () => {
+    expect(
+      splitList("lead intake from phone calls, Facebook messages, referrals, and website forms")
+    ).toEqual([
+      "lead intake from phone calls",
+      "Facebook messages",
+      "referrals",
+      "website forms",
+    ]);
+  });
 });
 
 const baseForm: FormData = {

@@ -43,7 +43,12 @@ export interface ExtractedIntent {
 // segments produced by trailing/leading/repeated commas and whitespace-only
 // entries.
 export const splitList = (value: string): string[] =>
-  value ? value.split(",").map((item) => item.trim()).filter(Boolean) : [];
+  value
+    ? value
+        .split(",")
+        .map((item) => item.trim().replace(/^(and|or)\s+/i, ""))
+        .filter(Boolean)
+    : [];
 
 // The seam between the editable form and the canonical model. The future
 // mind-dump miner will produce an ExtractedIntent here instead of the form.
