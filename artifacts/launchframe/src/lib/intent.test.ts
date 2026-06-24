@@ -279,4 +279,20 @@ describe("parseBrainDump — smart CTA extraction", () => {
     const intent = parseBrainDump("Roofing contractor. Get estimate for your project.");
     expect(intent.callToAction).toBe("request a quote");
   });
+
+  it("donate + volunteer: donation CTA takes priority, callToActionCustom is empty", () => {
+    const intent = parseBrainDump(
+      "We are a nonprofit. Please donate to support our cause. We also need people to volunteer.",
+    );
+    expect(intent.callToAction).toBe("donate");
+    expect(intent.callToActionCustom ?? "").toBe("");
+  });
+
+  it("volunteer-only: maps to callToAction 'get involved' and callToActionCustom 'Volunteer Today'", () => {
+    const intent = parseBrainDump(
+      "Community garden — we need people to volunteer every Saturday.",
+    );
+    expect(intent.callToAction).toBe("get involved");
+    expect(intent.callToActionCustom).toBe("Volunteer Today");
+  });
 });

@@ -457,6 +457,7 @@ export default function Home() {
     setDraftExists(false);
     setLastMinedToneNuance("");
     setLastMinedCtaCustom("");
+    setBrainDump("");
   };
 
   const handleQuestionAnswer = (question: ResolutionQuestion, value: string | string[]) => {
@@ -1029,6 +1030,21 @@ export default function Home() {
                 </Select>
               </div>
             </div>
+
+            {lastMinedCtaCustom && (
+              <div className="space-y-2">
+                <Label htmlFor="ctaCustom">Custom CTA <span className="text-xs font-normal text-muted-foreground">(AI-detected)</span></Label>
+                <Input
+                  id="ctaCustom"
+                  name="ctaCustom"
+                  value={lastMinedCtaCustom}
+                  onChange={(e) => setLastMinedCtaCustom(e.target.value)}
+                  placeholder="e.g. Join Waitlist"
+                  data-testid="input-cta-custom"
+                />
+                <p className="text-xs text-muted-foreground">This overrides the dropdown CTA in the generated prompt.</p>
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="techStack">Preferred Build Type / Technology Stack</Label>

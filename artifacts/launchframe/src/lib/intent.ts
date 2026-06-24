@@ -378,14 +378,17 @@ export function parseBrainDump(text: string): ExtractedIntent {
   // Detect custom CTA phrases that have no standard option (waitlist, early
   // access) and route them to callToActionCustom so effectiveCta in the UI
   // shows the specific phrase rather than a generic fallback.
+  // Guard: if a donation-family CTA was captured, do not let volunteer text
+  // override it with "Volunteer Today". Donation intent takes priority.
   if (!intent.callToActionCustom) {
     if (/\b(join\s+(?:the\s+)?waitlist|waitlist\s+signup)\b/i.test(text)) {
       intent.callToActionCustom = "Join Waitlist";
     } else if (/\b(get\s+early\s+access|early\s+access)\b/i.test(text)) {
       intent.callToActionCustom = "Get Early Access";
-    } else if (/\bvolunteer\b/i.test(text)) {
+    } else if (/\bvolunteer\b/i.test(text) && intent.callToAction !== "donate") {
       // "volunteer" maps to the standard "get involved" CTA; add a friendlier
       // custom phrase so the generated output shows "Volunteer Today".
+      // Only fire when donation is NOT the primary CTA.
       intent.callToActionCustom = "Volunteer Today";
       if (!intent.callToAction) intent.callToAction = "get involved";
     }
