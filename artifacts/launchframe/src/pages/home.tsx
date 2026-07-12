@@ -1239,7 +1239,7 @@ function OutputView({
   const properNounMap: Record<string, string> = {
     linkedin: "LinkedIn", youtube: "YouTube", instagram: "Instagram",
     facebook: "Facebook", google: "Google", tiktok: "TikTok",
-    wordpress: "WordPress", shopify: "Shopify", quickbooks: "QuickBooks",
+    wordpress: "WordPress", shopify: "Shopify", quickbooks: "QuickBooks", ai: "AI",
     mailchimp: "Mailchimp", hubspot: "HubSpot",
   };
   const fixProperNouns = (s: string): string => {
@@ -2276,6 +2276,8 @@ ${suggestions.map((s) => `- ${s}`).join("\n")}`
   const buildPrompt = `# Universal Agent Build Prompt
 
 Use this prompt in your preferred AI coding agent (Claude Code, Cursor, Replit Agent, Gemini, ChatGPT, or any other builder). It is self-contained — paste it in as-is.
+
+**Name the project/repo/app after the business (${bizName}), not after this prompt or document.**
 
 ## Project Summary
 Build a ${projectNoun} for ${bizName}${projectName ? ` (project: ${projectName})` : ""}, a ${orgType || "local service business"}.${goalDisplay ? ` Primary goal: ${goalDisplay}.` : ""}${softwareSection}
