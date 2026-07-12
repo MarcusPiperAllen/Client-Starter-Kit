@@ -1,0 +1,8 @@
+{
+  "installCommand": "pnpm install",
+  "buildCommand": "pnpm --filter @workspace/launchframe run build",
+  "outputDirectory": "artifacts/launchframe/dist/public",
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api" }
+  ]
+}
