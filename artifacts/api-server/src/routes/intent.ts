@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { getOpenAI } from "@workspace/integrations-openai-ai-server";
+import { getOpenAI, getModel } from "@workspace/integrations-openai-ai-server";
 import {
   MineIntentBody,
   MineIntentResponse,
@@ -279,7 +279,7 @@ router.post("/intent/mine", async (req, res) => {
   let completion;
   try {
     completion = await getOpenAI().chat.completions.create({
-      model: "gpt-5.4",
+      model: getModel(),
       max_completion_tokens: 8192,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
@@ -442,7 +442,7 @@ router.post("/intent/copy", async (req, res) => {
   let completion;
   try {
     completion = await getOpenAI().chat.completions.create({
-      model: "gpt-5.4",
+      model: getModel(),
       max_completion_tokens: 8192,
       messages: [
         { role: "system", content: COPY_SYSTEM_PROMPT },
@@ -726,7 +726,7 @@ router.post("/intent/questions", async (req, res) => {
 
   try {
     const completion = await getOpenAI().chat.completions.create({
-      model: "gpt-5.4",
+      model: getModel(),
       max_completion_tokens: 2048,
       messages: [
         { role: "system", content: QUESTIONS_SYSTEM_PROMPT },
