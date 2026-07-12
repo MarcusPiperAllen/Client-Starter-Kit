@@ -1,6 +1,6 @@
 kind = "web"
 previewPath = "/"
-title = "LaunchFrame"
+title = "PromptDraft"
 version = "1.0.0"
 id = "artifacts/launchframe"
 router = "path"
