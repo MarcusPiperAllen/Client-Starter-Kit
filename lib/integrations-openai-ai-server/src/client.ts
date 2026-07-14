@@ -2,20 +2,45 @@ import OpenAI from "openai";
 
 let _client: OpenAI | null = null;
 
+const DEFAULT_MODEL = "gpt-5.4";
+
 /**
- * Returns true when an OpenAI client can be constructed - either through
- * Replit's managed "AI Integrations" connector (base URL + key) or through
- * a standard OPENAI_API_KEY (e.g. when running outside Replit, such as on
- * Vercel). Use this to decide whether to attempt an AI call or fall back,
- * without triggering a throw.
+ * Resolves credentials from whichever environment this is running in:
+ * - Replit's managed AI integration (AI_INTEGRATIONS_OPENAI_BASE_URL / _API_KEY)
+ * - A standard OpenAI key (OPENAI_API_KEY, optionally OPENAI_BASE_URL), used
+ *   anywhere outside Replit (e.g. Vercel)
+ * Replit's variables take precedence when both are present.
+ */
+function resolveCredentials(): { apiKey: string; baseURL?: string } | null {
+  const replitBaseURL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+  const replitApiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+  if (replitBaseURL && replitApiKey) {
+    return { apiKey: replitApiKey, baseURL: replitBaseURL };
+  }
+
+  const standardApiKey = process.env.OPENAI_API_KEY;
+  if (standardApiKey) {
+    return { apiKey: standardApiKey, baseURL: process.env.OPENAI_BASE_URL };
+  }
+
+  return null;
+}
+
+/**
+ * Returns true when either the Replit AI integration or a standard OpenAI key
+ * is configured. Use this to decide whether to attempt an AI call or fall
+ * back, without triggering a throw.
  */
 export function isOpenAIConfigured(): boolean {
-  const hasReplitIntegration = Boolean(
-    process.env.AI_INTEGRATIONS_OPENAI_BASE_URL &&
-      process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-  );
-  const hasStandardKey = Boolean(process.env.OPENAI_API_KEY);
-  return hasReplitIntegration || hasStandardKey;
+  return resolveCredentials() !== null;
+}
+
+/**
+ * The chat model to use — overridable via OPENAI_MODEL for environments where
+ * the default model name isn't available under the configured account/key.
+ */
+export function getModel(): string {
+  return process.env.OPENAI_MODEL || DEFAULT_MODEL;
 }
 
 /**
@@ -31,21 +56,14 @@ export function isOpenAIConfigured(): boolean {
 export function getOpenAI(): OpenAI {
   if (_client) return _client;
 
-  const replitBaseURL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
-  const replitApiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
-  const standardApiKey = process.env.OPENAI_API_KEY;
+  const creds = resolveCredentials();
 
-  if (replitBaseURL && replitApiKey) {
-    _client = new OpenAI({ apiKey: replitApiKey, baseURL: replitBaseURL });
-    return _client;
+  if (!creds) {
+    throw new Error(
+      "OpenAI is not configured. Set AI_INTEGRATIONS_OPENAI_BASE_URL + AI_INTEGRATIONS_OPENAI_API_KEY (Replit) or OPENAI_API_KEY (standard, e.g. Vercel).",
+    );
   }
 
-  if (standardApiKey) {
-    _client = new OpenAI({ apiKey: standardApiKey });
-    return _client;
-  }
-
-  throw new Error(
-    "OpenAI is not configured. Set AI_INTEGRATIONS_OPENAI_BASE_URL and AI_INTEGRATIONS_OPENAI_API_KEY (on Replit), or OPENAI_API_KEY (everywhere else, e.g. Vercel).",
-  );
+  _client = new OpenAI(creds);
+  return _client;
 }

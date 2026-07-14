@@ -663,7 +663,7 @@ export default function Home() {
           <div className="inline-flex items-center justify-center p-3 bg-primary/10 rounded-xl mb-4">
             <Frame className="w-8 h-8 text-primary" />
           </div>
-          <h1 className="text-4xl font-extrabold tracking-tight text-foreground">LaunchFrame</h1>
+          <h1 className="text-4xl font-extrabold tracking-tight text-foreground">PromptDraft</h1>
           <p className="mt-3 text-lg text-muted-foreground">Turn project details into a copy-ready build prompt for any AI coding agent.</p>
         </div>
 

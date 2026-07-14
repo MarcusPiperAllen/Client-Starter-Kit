@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { getOpenAI } from "@workspace/integrations-openai-ai-server";
+import { getOpenAI, getModel } from "@workspace/integrations-openai-ai-server";
 import {
   MineIntentBody,
   MineIntentResponse,
@@ -164,7 +164,7 @@ const FIELD_LABELS: Record<keyof ExtractedIntent, string> = {
   notes: "Notes",
 };
 
-const SYSTEM_PROMPT = `You are LaunchFrame's Intent Miner: a specialized prompt-architecture assistant, not a generic chatbot and not a label extractor. Your only job is to understand messy project intent and convert it into a complete, build-ready project brief that will power ONE Universal Agent Build Prompt for a downstream AI coding agent (Replit Agent, Claude Code, Cursor, Gemini, ChatGPT, etc.).
+const SYSTEM_PROMPT = `You are PromptDraft's Intent Miner: a specialized prompt-architecture assistant, not a generic chatbot and not a label extractor. Your only job is to understand messy project intent and convert it into a complete, build-ready project brief that will power ONE Universal Agent Build Prompt for a downstream AI coding agent (Replit Agent, Claude Code, Cursor, Gemini, ChatGPT, etc.).
 
 Think like a trained intake strategist. Before filling fields, reason through the project:
 - What is the user really trying to build, beneath the messy wording?
@@ -279,7 +279,7 @@ router.post("/intent/mine", async (req, res) => {
   let completion;
   try {
     completion = await getOpenAI().chat.completions.create({
-      model: "gpt-5.4",
+      model: getModel(),
       max_completion_tokens: 8192,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
@@ -346,7 +346,7 @@ router.post("/intent/mine", async (req, res) => {
 // so on any AI failure we return 502 and the client uses its templates.
 // ---------------------------------------------------------------------------
 
-const COPY_SYSTEM_PROMPT = `You are LaunchFrame's Copy Intelligence Layer: a senior brand and conversion copywriter. You are given a STRUCTURED project brief (already extracted and validated) and must write the high-value marketing copy for the project's landing page. You are not a chatbot and not a summarizer — you write copy a real founder would be proud to ship.
+const COPY_SYSTEM_PROMPT = `You are PromptDraft's Copy Intelligence Layer: a senior brand and conversion copywriter. You are given a STRUCTURED project brief (already extracted and validated) and must write the high-value marketing copy for the project's landing page. You are not a chatbot and not a summarizer — you write copy a real founder would be proud to ship.
 
 You will receive: business name, founder name, organization type, project kind (website vs software/app), primary goal, target audience, brand tone, call to action, the list of services/features, and any notes. Write copy that reads as if it was written specifically for THIS business — concrete, benefit-led, and human.
 
@@ -442,7 +442,7 @@ router.post("/intent/copy", async (req, res) => {
   let completion;
   try {
     completion = await getOpenAI().chat.completions.create({
-      model: "gpt-5.4",
+      model: getModel(),
       max_completion_tokens: 8192,
       messages: [
         { role: "system", content: COPY_SYSTEM_PROMPT },
@@ -666,7 +666,7 @@ function buildFallbackQuestions(intent: ExtractedIntent, suggestions: string[]):
   return questions;
 }
 
-const QUESTIONS_SYSTEM_PROMPT = `You are LaunchFrame's Resolution Strategist. You receive a partially-filled project brief and identify the 1-3 most impactful gaps to resolve before a developer can build the project.
+const QUESTIONS_SYSTEM_PROMPT = `You are PromptDraft's Resolution Strategist. You receive a partially-filled project brief and identify the 1-3 most impactful gaps to resolve before a developer can build the project.
 
 Rank by impact:
   1. ARCHITECTURAL (highest): authentication, user accounts, payments, pricing tiers, user roles, database needs, external API integrations, MVP scope decisions.
@@ -726,7 +726,7 @@ router.post("/intent/questions", async (req, res) => {
 
   try {
     const completion = await getOpenAI().chat.completions.create({
-      model: "gpt-5.4",
+      model: getModel(),
       max_completion_tokens: 2048,
       messages: [
         { role: "system", content: QUESTIONS_SYSTEM_PROMPT },
